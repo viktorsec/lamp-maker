@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#eee9d8" />
+    <title>Lamp Maker — Square SVG</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="brand"><span class="brand-icon" aria-hidden="true"></span> Lamp Maker</span>
+        <span class="badge">Cut file / SVG</span>
+      </header>
+      <section class="intro">
+        <p class="eyebrow">GEOMETRY LIBRARY / 001</p>
+        <h1>Square<span>01</span></h1>
+        <p>Set the dimensions.<br>Export the outline.<br>Take it to the cutter.</p>
+      </section>
+      <section class="workspace" aria-label="Square generator">
+        <div class="controls">
+          <h2>Dimensions</h2>
+          <p class="description">Equal sides. Four right angles.</p>
+          <label for="size">Side length</label>
+          <div class="input-wrap">
+            <input id="size" type="number" value="100" min="1" max="1000" step="any" inputmode="decimal" aria-describedby="size-help size-error" />
+            <span>mm</span>
+          </div>
+          <p id="size-help" class="hint">Choose a size from 1 to 1,000 mm.</p>
+          <p id="size-error" class="error" role="status"></p>
+          <dl>
+            <div><dt>Stroke</dt><dd><span class="color-dot" aria-hidden="true"></span>Black</dd></div>
+            <div><dt>Width</dt><dd>0.01 mm · hairline</dd></div>
+            <div><dt>Fill</dt><dd>None</dd></div>
+          </dl>
+          <button id="download" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" /></svg>Download SVG</button>
+          <p class="download-hint">1 closed path · millimeter units</p>
+        </div>
+        <div class="preview-panel">
+          <div class="preview-heading"><span>DRAWING / FIT TO VIEW</span><span id="dimensions" aria-live="polite">100 × 100 mm</span></div>
+          <div class="preview" id="preview" role="img" aria-label="Preview of a 100 millimeter square">
+            <svg viewBox="0 0 120 120" aria-hidden="true"><rect x="10" y="10" width="100" height="100" fill="none" stroke="#000000" stroke-width="0.5" vector-effect="non-scaling-stroke" /></svg>
+          </div>
+          <p class="preview-note">Preview scales to fit. Your SVG keeps the exact size.</p>
+        </div>
+      </section>
+      <footer><span>Lamp Maker / Workshop tools</span><span>01 — Square</span></footer>
+    </main>
+  </body>
+</html>
