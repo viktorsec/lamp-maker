@@ -4,6 +4,8 @@ const dimensions = document.querySelector('#dimensions');
 const error = document.querySelector('#size-error');
 const preview = document.querySelector('#preview');
 const kerfInputs = ['min', 'max', 'step'].map(name => document.querySelector(`#kerf-${name}`));
+const kumikoInputs = ['width', 'height', 'spacing', 'strut', 'frame'].map(name => document.querySelector(`#kumiko-${name}`));
+const kumikoPattern = document.querySelector('#kumiko-pattern');
 let mode = 'square';
 let currentDrawing = null;
 const number = value => String(Number(value.toFixed(6)));
@@ -109,6 +111,111 @@ function generateSvg(drawing) {
 `;
 }
 
+// Clip a convex polygon against a half-plane. The same operation trims cells
+// to the frame and offsets their edges to leave a continuous material lattice.
+function clipPolygon(points, distance) {
+  const result = [];
+  points.forEach((point, index) => {
+    const next = points[(index + 1) % points.length];
+    const a = distance(point), b = distance(next);
+    if (a >= 0) result.push(point);
+    if ((a >= 0) !== (b >= 0)) {
+      const t = a / (a - b);
+      result.push([point[0] + t * (next[0] - point[0]), point[1] + t * (next[1] - point[1])]);
+    }
+  });
+  return result;
+}
+
+function kumikoDrawing() {
+  const [width, height, spacing, strut, frame] = kumikoInputs.map(input => input.valueAsNumber);
+  const limits = [[10, 1000], [10, 1000], [5, 200], [0.5, 20], [1, 100]];
+  if ([width, height, spacing, strut, frame].some((value, index) =>
+    !Number.isFinite(value) || value < limits[index][0] || value > limits[index][1])) {
+    throw new Error('Enter all Kumiko dimensions within the displayed ranges.');
+  }
+  if (2 * frame >= Math.min(width, height)) throw new Error('Frame must be less than half the smaller panel dimension.');
+  const asanoha = kumikoPattern.value === 'asanoha';
+  const diamond = kumikoPattern.value === 'diamond';
+  const innerWidth = width - 2 * frame, innerHeight = height - 2 * frame;
+  // Boundary spokes belong inside the frame. Put their centerlines half a
+  // lattice width outside the opening so their inner edges meet it exactly.
+  const latticeWidth = innerWidth + strut, latticeHeight = innerHeight + strut;
+  const latticeOrigin = frame - strut / 2;
+  const columns = Math.max(1, Math.round(latticeWidth / spacing));
+  // Whole horizontal repeats and an even number of rows put all four frame
+  // edges on lattice symmetry axes. Fit the two pitches to the exact opening.
+  const rows = Math.max(2, 2 * Math.round(latticeHeight / (spacing * (diamond ? 1 : Math.sqrt(3)))));
+  const pitch = latticeWidth / columns, rowHeight = latticeHeight / rows;
+  if ((rows + 1) * (columns + 2) * (asanoha ? 6 : diamond ? 1 : 2) > 6000) {
+    throw new Error('Pattern is too dense. Increase the target size or reduce the panel size.');
+  }
+  const openings = [];
+  function addOpening(cell) {
+    const perimeter = cell.reduce((sum, p, i) => {
+      const q = cell[(i + 1) % cell.length];
+      return sum + Math.hypot(q[0] - p[0], q[1] - p[1]);
+    }, 0);
+    const twiceArea = Math.abs(cell.reduce((sum, p, i) => {
+      const q = cell[(i + 1) % cell.length];
+      return sum + p[0] * q[1] - q[0] * p[1];
+    }, 0));
+    // Validate against the fitted geometry, rather than the requested spacing.
+    if (strut >= 2 * twiceArea / perimeter) {
+      throw new Error('Reduce the lattice width or increase the target size to leave open cutouts.');
+    }
+    let polygon = cell;
+    cell.forEach((a, index) => {
+      const b = cell[(index + 1) % cell.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const length = Math.hypot(dx, dy);
+      polygon = clipPolygon(polygon, p => (dx * (p[1] - a[1]) - dy * (p[0] - a[0])) / length - strut / 2);
+    });
+    polygon = clipPolygon(polygon, p => p[0] - frame);
+    polygon = clipPolygon(polygon, p => width - frame - p[0]);
+    polygon = clipPolygon(polygon, p => p[1] - frame);
+    polygon = clipPolygon(polygon, p => height - frame - p[1]);
+    const area = Math.abs(polygon.reduce((sum, p, i) => {
+      const q = polygon[(i + 1) % polygon.length];
+      return sum + p[0] * q[1] - q[0] * p[1];
+    }, 0)) / 2;
+    // Omit collapsed edge slivers that cannot produce useful cutouts.
+    if (polygon.length >= 3 && area > 0.01) openings.push(outlinePath(polygon, 0, 0));
+  }
+  function addTriangle(triangle) {
+    if (!asanoha) return addOpening(triangle);
+    const center = [0, 1].map(axis => triangle.reduce((sum, p) => sum + p[axis], 0) / 3);
+    triangle.forEach((p, i) => addOpening([p, triangle[(i + 1) % 3], center]));
+  }
+  for (let row = 0; row < rows + (diamond ? 1 : 0); row++) {
+    for (let column = -1; column <= columns; column++) {
+      const x = latticeOrigin + column * pitch + (row % 2) * pitch / 2;
+      const y = latticeOrigin + row * rowHeight;
+      if (diamond) {
+        addOpening([[x, y - rowHeight], [x + pitch / 2, y], [x, y + rowHeight], [x - pitch / 2, y]]);
+        continue;
+      }
+      addTriangle([[x, y], [x + pitch, y], [x + pitch / 2, y + rowHeight]]);
+      addTriangle([[x, y], [x + pitch / 2, y + rowHeight], [x - pitch / 2, y + rowHeight]]);
+    }
+  }
+  if (!openings.length) throw new Error('No openings fit inside the frame. Reduce frame or lattice width, or increase the panel size.');
+  const outer = outlinePath([[0, 0], [width, 0], [width, height], [0, height]], 0, 0);
+  const name = asanoha ? 'Asanoha' : diamond ? 'Diamond lattice' : 'Triangular lattice';
+  const rounded = value => number(Number(value.toFixed(3)));
+  return { width, height,
+    triangleSize: diamond
+      ? `Computed: ${rounded(pitch)} mm wide · ${rounded(rowHeight * 2)} mm tall`
+      : `Computed: ${rounded(pitch)} mm base · ${rounded(Math.hypot(pitch / 2, rowHeight))} mm sides`,
+    layout: `${columns} repeats × ${rows} rows · fitted pitch ${number(pitch)} × ${number(rowHeight)} mm`,
+    content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(d => `<path d="${d}" />`).join('')}</g></g>`,
+    preview: `<path d="${outer} ${openings.join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`,
+    filename: `kumiko-${kumikoPattern.value}-${number(width)}x${number(height)}mm.svg`,
+    description: `${number(width)} × ${number(height)} mm`,
+    label: `${name} Kumiko panel, ${number(width)} by ${number(height)} millimeters, with ${openings.length} cutouts`,
+    hint: `${openings.length} closed cutouts + outer frame · millimeter units` };
+}
+
 function matingPath(points, matingEdges, x, y) {
   return points.map((point, index) => {
     if (!matingEdges[index]) return '';
@@ -118,6 +225,7 @@ function matingPath(points, matingEdges, x, y) {
 }
 
 function previewContent(drawing) {
+  if (drawing.preview) return drawing.preview;
   if (!drawing.pieces) return drawing.content;
   const emphasize = document.querySelector('#emphasize-offset').checked;
   const largest = Math.max(...drawing.pieces.map(piece => Math.abs(piece.kerf)));
@@ -141,23 +249,30 @@ function previewContent(drawing) {
 }
 
 function updatePreview() {
+  document.querySelector('label[for="kumiko-spacing"]').textContent = kumikoPattern.value === 'diamond' ? 'Target diamond width' : 'Target triangle size';
   try {
     if (mode === 'square') {
       const size = readSize();
       if (size === null) throw new Error('Enter a side length from 1 to 1,000 mm.');
       currentDrawing = squareDrawing(size);
-    } else {
+    } else if (mode === 'kerf') {
       currentDrawing = kerfDrawing(readKerfs());
+    } else {
+      currentDrawing = kumikoDrawing();
     }
     error.textContent = '';
     downloadButton.disabled = false;
     dimensions.textContent = currentDrawing.description;
     preview.setAttribute('aria-label', currentDrawing.label);
     document.querySelector('#download-hint').textContent = currentDrawing.hint;
+    document.querySelector('#kumiko-layout').textContent = currentDrawing.layout || '';
+    document.querySelector('#kumiko-triangle-size').textContent = currentDrawing.triangleSize || '';
     // Preview overlays and optional exaggeration never enter the downloaded SVG.
     preview.innerHTML = `<svg viewBox="0 0 ${currentDrawing.width} ${currentDrawing.height}" aria-hidden="true" fill="none" stroke="#000000" stroke-width="${mode === 'square' ? currentDrawing.width / 600 : 0.09}">${previewContent(currentDrawing)}</svg>`;
   } catch (issue) {
     currentDrawing = null;
+    document.querySelector('#kumiko-layout').textContent = '';
+    document.querySelector('#kumiko-triangle-size').textContent = '';
     error.textContent = issue.message;
     downloadButton.disabled = true;
     dimensions.textContent = 'Enter valid dimensions';
@@ -166,6 +281,7 @@ function updatePreview() {
   }
   sizeInput.setAttribute('aria-invalid', String(mode === 'square' && !currentDrawing));
   kerfInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kerf' && !currentDrawing)));
+  kumikoInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kumiko' && !currentDrawing)));
 }
 
 function setMode(nextMode) {
@@ -173,20 +289,27 @@ function setMode(nextMode) {
   document.body.dataset.mode = mode;
   document.querySelector('#square-controls').hidden = mode !== 'square';
   document.querySelector('#kerf-controls').hidden = mode !== 'kerf';
+  document.querySelector('#kumiko-controls').hidden = mode !== 'kumiko';
   document.querySelector('#kerf-legend').hidden = mode !== 'kerf';
   document.querySelectorAll('[data-mode]').forEach(button => {
     if (button.tagName === 'BUTTON') button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
   });
-  const kerf = mode === 'kerf';
-  document.querySelector('#title').innerHTML = kerf ? 'Kerf test<span>02</span>' : 'Square<span>01</span>';
-  document.querySelector('.eyebrow').textContent = `GEOMETRY LIBRARY / ${kerf ? '002' : '001'}`;
-  document.querySelector('#controls-title').textContent = kerf ? 'Kerf compensation' : 'Dimensions';
-  document.querySelector('#description').textContent = kerf ? '20 mm pieces. Compensation only on the mating edges.' : 'Equal sides. Four right angles.';
-  document.querySelector('#footer-mode').textContent = kerf ? '02 — Kerf test' : '01 — Square';
+  const settings = {
+    square: ['01', 'Square', 'Dimensions', 'Equal sides. Four right angles.'],
+    kerf: ['02', 'Kerf test', 'Kerf compensation', '20 mm pieces. Compensation only on the mating edges.'],
+    kumiko: ['03', 'Kumiko', 'Pattern & panel', 'Repeating geometry. A continuous lattice inside a solid frame.']
+  }[mode];
+  const [index, title, controlsTitle, description] = settings;
+  document.querySelector('#title').innerHTML = `${title}<span>${index}</span>`;
+  document.querySelector('.eyebrow').textContent = `GEOMETRY LIBRARY / 0${index}`;
+  document.querySelector('#controls-title').textContent = controlsTitle;
+  document.querySelector('#description').textContent = description;
+  document.querySelector('#footer-mode').textContent = `${index} — ${title}`;
   updatePreview();
 }
 
-[sizeInput, ...kerfInputs].forEach(input => input.addEventListener('input', updatePreview));
+[sizeInput, ...kerfInputs, ...kumikoInputs].forEach(input => input.addEventListener('input', updatePreview));
+kumikoPattern.addEventListener('change', updatePreview);
 document.querySelectorAll('button[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
 downloadButton.addEventListener('click', () => {
   if (!currentDrawing) return;

@@ -45,8 +45,14 @@ footer { display: flex; justify-content: space-between; gap: 16px; padding: 14px
 @media (max-width: 700px) { main { padding: 20px; } .intro { padding: 24px 0; } h1 { font-size: 70px; } .intro > p:last-child { max-width: 150px; font-size: 10px; } .workspace { grid-template-columns: 1fr; } .preview-panel { grid-column: 1; grid-row: 1; } .controls { grid-column: 1; grid-row: 2; border-left: 0; border-top: 1px solid var(--ink); padding: 20px; } .preview { min-height: 260px; } .preview > svg { max-height: 270px; } .description { margin-bottom: 20px; } dl { margin: 14px 0 24px; } }
 @media (max-width: 380px) { main { padding: 14px; } .brand { font-size: 16px; } .badge { font-size: 9px; } .intro { grid-template-columns: 1fr; } .intro > p:last-child { margin: 18px 0 0; max-width: none; } }
 [hidden] { display: none !important; }
-.mode-switch { display: flex; gap: 0; margin: 0 0 16px; }
+.mode-switch { display: flex; gap: 0; margin: 0 0 16px; overflow-x: auto; }
 .mode-switch button { width: auto; margin: 0; padding: 12px 18px; background: transparent; color: var(--ink); border: 1px solid var(--ink); font-weight: 400; }
+.mode-switch button { flex-shrink: 0; }
+#kumiko-controls label:not(:first-child) { margin-top: 16px; }
+#kumiko-controls input { font-size: 25px; letter-spacing: -1px; }
+#kumiko-pattern { width: 100%; padding: 12px 8px; font: inherit; font-size: 12px; color: var(--ink); background: #f6f2e4; border: 1px solid var(--ink); border-bottom-width: 2px; }
+#kumiko-pattern:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+body[data-mode="kumiko"] .preview > svg { width: 90%; max-width: 600px; max-height: 600px; }
 .mode-switch button + button { border-left: 0; }
 .mode-switch button[aria-pressed="true"] { background: var(--ink); color: #eee9d8; }
 .mode-switch button:hover { background: #202f6115; }
