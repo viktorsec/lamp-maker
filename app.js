@@ -4,7 +4,7 @@ const dimensions = document.querySelector('#dimensions');
 const error = document.querySelector('#size-error');
 const preview = document.querySelector('#preview');
 const kerfInputs = ['min', 'max', 'step'].map(name => document.querySelector(`#kerf-${name}`));
-const kumikoInputs = ['width', 'height', 'spacing', 'strut', 'frame'].map(name => document.querySelector(`#kumiko-${name}`));
+const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame'].map(name => document.querySelector(`#kumiko-${name}`));
 const kumikoPattern = document.querySelector('#kumiko-pattern');
 let mode = 'square';
 let currentDrawing = null;
@@ -128,12 +128,13 @@ function clipPolygon(points, distance) {
 }
 
 function kumikoDrawing() {
-  const [width, height, spacing, strut, frame] = kumikoInputs.map(input => input.valueAsNumber);
-  const limits = [[10, 1000], [10, 1000], [5, 200], [0.5, 20], [1, 100]];
-  if ([width, height, spacing, strut, frame].some((value, index) =>
+  const [width, height, cellCount, strut, frame] = kumikoInputs.map(input => input.valueAsNumber);
+  const limits = [[10, 1000], [10, 1000], [1, 100], [0.5, 20], [1, 100]];
+  if ([width, height, cellCount, strut, frame].some((value, index) =>
     !Number.isFinite(value) || value < limits[index][0] || value > limits[index][1])) {
     throw new Error('Enter all Kumiko dimensions within the displayed ranges.');
   }
+  if (!Number.isInteger(cellCount)) throw new Error('Enter a whole pattern cell count from 1 to 100.');
   if (2 * frame >= Math.min(width, height)) throw new Error('Frame must be less than half the smaller panel dimension.');
   const asanoha = kumikoPattern.value === 'asanoha';
   const diamond = kumikoPattern.value === 'diamond';
@@ -142,13 +143,13 @@ function kumikoDrawing() {
   // lattice width outside the opening so their inner edges meet it exactly.
   const latticeWidth = innerWidth + strut, latticeHeight = innerHeight + strut;
   const latticeOrigin = frame - strut / 2;
-  const columns = Math.max(1, Math.round(latticeWidth / spacing));
-  // Whole horizontal repeats and an even number of rows put all four frame
+  const pitch = latticeWidth / cellCount;
+  // Whole horizontal pattern cells and an even number of rows put all four frame
   // edges on lattice symmetry axes. Fit the two pitches to the exact opening.
-  const rows = Math.max(2, 2 * Math.round(latticeHeight / (spacing * (diamond ? 1 : Math.sqrt(3)))));
-  const pitch = latticeWidth / columns, rowHeight = latticeHeight / rows;
-  if ((rows + 1) * (columns + 2) * (asanoha ? 6 : diamond ? 1 : 2) > 6000) {
-    throw new Error('Pattern is too dense. Increase the target size or reduce the panel size.');
+  const rows = Math.max(2, 2 * Math.round(latticeHeight / (pitch * (diamond ? 1 : Math.sqrt(3)))));
+  const rowHeight = latticeHeight / rows;
+  if ((rows + 1) * (cellCount + 2) * (asanoha ? 6 : diamond ? 1 : 2) > 6000) {
+    throw new Error('Pattern is too dense. Reduce the pattern cell count or use a less elongated panel.');
   }
   const openings = [];
   function addOpening(cell) {
@@ -160,9 +161,9 @@ function kumikoDrawing() {
       const q = cell[(i + 1) % cell.length];
       return sum + p[0] * q[1] - q[0] * p[1];
     }, 0));
-    // Validate against the fitted geometry, rather than the requested spacing.
+    // Validate against the fitted geometry, including the automatically fitted row height.
     if (strut >= 2 * twiceArea / perimeter) {
-      throw new Error('Reduce the lattice width or increase the target size to leave open cutouts.');
+      throw new Error('Reduce the lattice width or reduce the pattern cell count to leave open cutouts.');
     }
     let polygon = cell;
     cell.forEach((a, index) => {
@@ -188,7 +189,7 @@ function kumikoDrawing() {
     triangle.forEach((p, i) => addOpening([p, triangle[(i + 1) % 3], center]));
   }
   for (let row = 0; row < rows + (diamond ? 1 : 0); row++) {
-    for (let column = -1; column <= columns; column++) {
+    for (let column = -1; column <= cellCount; column++) {
       const x = latticeOrigin + column * pitch + (row % 2) * pitch / 2;
       const y = latticeOrigin + row * rowHeight;
       if (diamond) {
@@ -204,10 +205,10 @@ function kumikoDrawing() {
   const name = asanoha ? 'Asanoha' : diamond ? 'Diamond lattice' : 'Triangular lattice';
   const rounded = value => number(Number(value.toFixed(3)));
   return { width, height,
-    triangleSize: diamond
-      ? `Computed: ${rounded(pitch)} mm wide · ${rounded(rowHeight * 2)} mm tall`
-      : `Computed: ${rounded(pitch)} mm base · ${rounded(Math.hypot(pitch / 2, rowHeight))} mm sides`,
-    layout: `${columns} repeats × ${rows} rows · fitted pitch ${number(pitch)} × ${number(rowHeight)} mm`,
+    cellDimensions: diamond
+      ? `Cell: ${rounded(pitch)} mm wide · ${rounded(rowHeight * 2)} mm tall`
+      : `Cell: ${rounded(pitch)} mm base · ${rounded(Math.hypot(pitch / 2, rowHeight))} mm sides`,
+    layout: `${cellCount} cells × ${rows} rows · fitted pitch ${number(pitch)} × ${number(rowHeight)} mm`,
     content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(d => `<path d="${d}" />`).join('')}</g></g>`,
     preview: `<path d="${outer} ${openings.join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`,
     filename: `kumiko-${kumikoPattern.value}-${number(width)}x${number(height)}mm.svg`,
@@ -249,7 +250,6 @@ function previewContent(drawing) {
 }
 
 function updatePreview() {
-  document.querySelector('label[for="kumiko-spacing"]').textContent = kumikoPattern.value === 'diamond' ? 'Target diamond width' : 'Target triangle size';
   try {
     if (mode === 'square') {
       const size = readSize();
@@ -266,13 +266,13 @@ function updatePreview() {
     preview.setAttribute('aria-label', currentDrawing.label);
     document.querySelector('#download-hint').textContent = currentDrawing.hint;
     document.querySelector('#kumiko-layout').textContent = currentDrawing.layout || '';
-    document.querySelector('#kumiko-triangle-size').textContent = currentDrawing.triangleSize || '';
+    document.querySelector('#kumiko-cell-dimensions').textContent = currentDrawing.cellDimensions || '';
     // Preview overlays and optional exaggeration never enter the downloaded SVG.
     preview.innerHTML = `<svg viewBox="0 0 ${currentDrawing.width} ${currentDrawing.height}" aria-hidden="true" fill="none" stroke="#000000" stroke-width="${mode === 'square' ? currentDrawing.width / 600 : 0.09}">${previewContent(currentDrawing)}</svg>`;
   } catch (issue) {
     currentDrawing = null;
     document.querySelector('#kumiko-layout').textContent = '';
-    document.querySelector('#kumiko-triangle-size').textContent = '';
+    document.querySelector('#kumiko-cell-dimensions').textContent = '';
     error.textContent = issue.message;
     downloadButton.disabled = true;
     dimensions.textContent = 'Enter valid dimensions';
@@ -282,6 +282,9 @@ function updatePreview() {
   sizeInput.setAttribute('aria-invalid', String(mode === 'square' && !currentDrawing));
   kerfInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kerf' && !currentDrawing)));
   kumikoInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kumiko' && !currentDrawing)));
+  const cellCount = document.querySelector('#kumiko-cell-count').valueAsNumber;
+  document.querySelector('#kumiko-decrease').disabled = !Number.isInteger(cellCount) || cellCount <= 1 || cellCount > 100;
+  document.querySelector('#kumiko-increase').disabled = !Number.isInteger(cellCount) || cellCount < 1 || cellCount >= 100;
 }
 
 function setMode(nextMode) {
@@ -310,6 +313,15 @@ function setMode(nextMode) {
 
 [sizeInput, ...kerfInputs, ...kumikoInputs].forEach(input => input.addEventListener('input', updatePreview));
 kumikoPattern.addEventListener('change', updatePreview);
+[['decrease', -1], ['increase', 1]].forEach(([direction, delta]) => {
+  document.querySelector(`#kumiko-${direction}`).addEventListener('click', () => {
+    const input = document.querySelector('#kumiko-cell-count');
+    const next = input.valueAsNumber + delta;
+    if (!Number.isInteger(next) || next < 1 || next > 100) return;
+    input.value = String(next);
+    updatePreview();
+  });
+});
 document.querySelectorAll('button[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
 downloadButton.addEventListener('click', () => {
   if (!currentDrawing) return;

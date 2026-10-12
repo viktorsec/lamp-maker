@@ -54,15 +54,20 @@
             <div class="input-wrap"><input id="kumiko-width" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
             <label for="kumiko-height">Panel height</label>
             <div class="input-wrap"><input id="kumiko-height" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
-            <label for="kumiko-spacing">Target triangle size</label>
-            <div class="input-wrap"><input id="kumiko-spacing" type="number" min="5" max="200" step="any" value="40" aria-describedby="kumiko-triangle-size kumiko-help size-error" /><span>mm</span></div>
-            <p id="kumiko-triangle-size" class="hint" aria-live="polite"></p>
+            <label for="kumiko-cell-count">Cells across width</label>
+            <div class="input-wrap pattern-stepper">
+              <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions kumiko-help size-error" />
+              <span>cells</span>
+              <button id="kumiko-decrease" type="button" aria-label="Decrease pattern cell count" title="One fewer pattern cell">−</button>
+              <button id="kumiko-increase" type="button" aria-label="Increase pattern cell count" title="One more pattern cell">+</button>
+            </div>
+            <p id="kumiko-cell-dimensions" class="hint" aria-live="polite"></p>
             <label for="kumiko-strut">Lattice width</label>
             <div class="input-wrap"><input id="kumiko-strut" type="number" min="0.5" max="20" step="any" value="2" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
             <label for="kumiko-frame">Frame width</label>
             <div class="input-wrap"><input id="kumiko-frame" type="number" min="1" max="100" step="any" value="8" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
             <p class="hint">Measured from the panel edge to the cutouts. Boundary spokes are included in this width.</p>
-            <p id="kumiko-help" class="hint">Panel: 10–1,000 mm. Target size: 5–200 mm. Lattice: 0.5–20 mm. Frame: 1–100 mm. Spacing adjusts horizontally and vertically to fit whole repeats, with matching edges on all four sides.</p>
+            <p id="kumiko-help" class="hint">Panel: 10–1,000 mm. Cells across width: 1–100 whole pattern cells. Lattice: 0.5–20 mm. Frame: 1–100 mm. Rows fit automatically to the panel height, with matching edges on all four sides.</p>
             <p id="kumiko-layout" class="hint" aria-live="polite"></p>
             <p class="hint">Kumiko-inspired cutouts in a single panel. Preview shows the remaining material. Export includes the outer frame and closed openings; no kerf compensation is applied.</p>
           </div>

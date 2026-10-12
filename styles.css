@@ -50,6 +50,13 @@ footer { display: flex; justify-content: space-between; gap: 16px; padding: 14px
 .mode-switch button { flex-shrink: 0; }
 #kumiko-controls label:not(:first-child) { margin-top: 16px; }
 #kumiko-controls input { font-size: 25px; letter-spacing: -1px; }
+.pattern-stepper { align-items: center; padding-right: 0; }
+.pattern-stepper button { flex: 0 0 32px; width: 32px; align-self: stretch; justify-content: center; padding: 0; margin: 0; font-size: 20px; background: transparent; color: var(--ink); border: 0; }
+.pattern-stepper button { border-left: 1px solid var(--rule); }
+.pattern-stepper button:hover { background: #202f6115; }
+.pattern-stepper button:disabled { color: #747a8c; background: transparent; opacity: .5; }
+.pattern-stepper input { appearance: textfield; }
+.pattern-stepper input::-webkit-inner-spin-button, .pattern-stepper input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 #kumiko-pattern { width: 100%; padding: 12px 8px; font: inherit; font-size: 12px; color: var(--ink); background: #f6f2e4; border: 1px solid var(--ink); border-bottom-width: 2px; }
 #kumiko-pattern:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 body[data-mode="kumiko"] .preview > svg { width: 90%; max-width: 600px; max-height: 600px; }
