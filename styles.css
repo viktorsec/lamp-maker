@@ -44,3 +44,24 @@ button:disabled { background: #747a8c; border-color: #747a8c; cursor: not-allowe
 footer { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; font-size: 10px; text-transform: uppercase; }
 @media (max-width: 700px) { main { padding: 20px; } .intro { padding: 24px 0; } h1 { font-size: 70px; } .intro > p:last-child { max-width: 150px; font-size: 10px; } .workspace { grid-template-columns: 1fr; } .preview-panel { grid-column: 1; grid-row: 1; } .controls { grid-column: 1; grid-row: 2; border-left: 0; border-top: 1px solid var(--ink); padding: 20px; } .preview { min-height: 260px; } .preview > svg { max-height: 270px; } .description { margin-bottom: 20px; } dl { margin: 14px 0 24px; } }
 @media (max-width: 380px) { main { padding: 14px; } .brand { font-size: 16px; } .badge { font-size: 9px; } .intro { grid-template-columns: 1fr; } .intro > p:last-child { margin: 18px 0 0; max-width: none; } }
+[hidden] { display: none !important; }
+.mode-switch { display: flex; gap: 0; margin: 0 0 16px; }
+.mode-switch button { width: auto; margin: 0; padding: 12px 18px; background: transparent; color: var(--ink); border: 1px solid var(--ink); font-weight: 400; }
+.mode-switch button + button { border-left: 0; }
+.mode-switch button[aria-pressed="true"] { background: var(--ink); color: #eee9d8; }
+.mode-switch button:hover { background: #202f6115; }
+.mode-switch button[aria-pressed="true"]:hover { background: var(--ink); }
+#kerf-controls label:not(:first-child) { margin-top: 16px; }
+#kerf-controls input { font-size: 25px; letter-spacing: -1px; }
+body[data-mode="kerf"] .preview > svg { width: 94%; max-width: none; max-height: 640px; }
+body[data-mode="kerf"] h1 { font-size: clamp(56px, 8vw, 96px); }
+.kerf-legend { padding: 14px 18px; border-top: 1px solid var(--rule); font-size: 10px; }
+.legend-items { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 14px; }
+.legend-items span { display: flex; align-items: center; gap: 7px; }
+.legend-items i { display: inline-block; width: 18px; height: 7px; }
+.legend-original { border-top: 1px dashed #657080; height: 0 !important; }
+.legend-added { background: #2164bd66; border: 1px solid #2164bd; }
+.legend-removed { background: #b4401f66; border: 1px solid #b4401f; }
+.offset-toggle { display: flex; align-items: center; gap: 8px; font-size: 11px; margin: 0; cursor: pointer; }
+.offset-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--blue); }
+#offset-note { margin: 8px 0 0; }

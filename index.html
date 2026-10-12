@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#eee9d8" />
-    <title>Lamp Maker — Square SVG</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>Lamp Maker — Cut files</title>
+    <link rel="stylesheet" href="styles.css?v=2" />
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -16,19 +16,36 @@
       </header>
       <section class="intro">
         <p class="eyebrow">GEOMETRY LIBRARY / 001</p>
-        <h1>Square<span>01</span></h1>
+        <h1 id="title">Square<span>01</span></h1>
         <p>Set the dimensions.<br>Export the outline.<br>Take it to the cutter.</p>
       </section>
-      <section class="workspace" aria-label="Square generator">
+      <nav class="mode-switch" aria-label="Generator">
+        <button type="button" data-mode="square" aria-pressed="true">01 / Square</button>
+        <button type="button" data-mode="kerf" aria-pressed="false">02 / Kerf test</button>
+      </nav>
+      <section class="workspace" aria-label="Cut file generator">
         <div class="controls">
-          <h2>Dimensions</h2>
-          <p class="description">Equal sides. Four right angles.</p>
+          <h2 id="controls-title">Dimensions</h2>
+          <p class="description" id="description">Equal sides. Four right angles.</p>
+          <div id="square-controls">
           <label for="size">Side length</label>
           <div class="input-wrap">
             <input id="size" type="number" value="100" min="1" max="1000" step="any" inputmode="decimal" aria-describedby="size-help size-error" />
             <span>mm</span>
           </div>
           <p id="size-help" class="hint">Choose a size from 1 to 1,000 mm.</p>
+          </div>
+          <div id="kerf-controls" hidden>
+            <label for="kerf-min">First kerf</label>
+            <div class="input-wrap"><input id="kerf-min" type="number" min="-1" max="1" step="0.001" value="0" aria-describedby="kerf-help size-error" /><span>mm</span></div>
+            <label for="kerf-max">Last kerf</label>
+            <div class="input-wrap"><input id="kerf-max" type="number" min="-1" max="1" step="0.001" value="0.30" aria-describedby="kerf-help size-error" /><span>mm</span></div>
+            <label for="kerf-step">Increment</label>
+            <div class="input-wrap"><input id="kerf-step" type="number" min="0.001" max="1" step="0.001" value="0.05" aria-describedby="kerf-help size-error" /><span>mm</span></div>
+            <p id="kerf-help" class="hint">Kerf compensation, −1 to 1 mm. Negative values loosen the fit; positive values tighten it. Up to 15 pairs. The last value is included only if the increment reaches it.</p>
+            <p class="hint">Only the tab, notch, and mating shoulders are adjusted. Fit each matching pair flat, edge to edge. Choose the snug fit. Compensation is already applied; set extra kerf offset to zero.</p>
+            <p class="hint">Set the SVG’s “engrave-labels” group to a light line engraving before cutting the “cut-outlines” group. Labels use red hairlines (RGB 255, 0, 0); cut outlines use black hairlines.</p>
+          </div>
           <p id="size-error" class="error" role="status"></p>
           <dl>
             <div><dt>Stroke</dt><dd><span class="color-dot" aria-hidden="true"></span>Black</dd></div>
@@ -36,17 +53,22 @@
             <div><dt>Fill</dt><dd>None</dd></div>
           </dl>
           <button id="download" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" /></svg>Download SVG</button>
-          <p class="download-hint">1 closed path · millimeter units</p>
+          <p class="download-hint" id="download-hint">1 closed path · millimeter units</p>
         </div>
         <div class="preview-panel">
           <div class="preview-heading"><span>DRAWING / FIT TO VIEW</span><span id="dimensions" aria-live="polite">100 × 100 mm</span></div>
           <div class="preview" id="preview" role="img" aria-label="Preview of a 100 millimeter square">
             <svg viewBox="0 0 120 120" aria-hidden="true"><rect x="10" y="10" width="100" height="100" fill="none" stroke="#000000" stroke-width="0.5" vector-effect="non-scaling-stroke" /></svg>
           </div>
+          <div id="kerf-legend" class="kerf-legend" hidden>
+            <div class="legend-items"><span><i class="legend-original" aria-hidden="true"></i>Original outline</span><span><i class="legend-added" aria-hidden="true"></i>Added material (+)</span><span><i class="legend-removed" aria-hidden="true"></i>Removed material (−)</span></div>
+            <label class="offset-toggle"><input id="emphasize-offset" type="checkbox" checked />Emphasize small offsets</label>
+            <p id="offset-note" class="hint"></p>
+          </div>
           <p class="preview-note">Preview scales to fit. Your SVG keeps the exact size.</p>
         </div>
       </section>
-      <footer><span>Lamp Maker / Workshop tools</span><span>01 — Square</span></footer>
+      <footer><span>Lamp Maker / Workshop tools</span><span id="footer-mode">01 — Square</span></footer>
     </main>
   </body>
 </html>
