@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#eee9d8" />
     <title>Lamp Maker — Cut files</title>
-    <link rel="stylesheet" href="styles.css?v=2" />
-    <script src="app.js" defer></script>
+    <link rel="stylesheet" href="styles.css?v=3" />
+    <script src="app.js?v=2" defer></script>
   </head>
   <body>
     <main>
@@ -15,14 +15,52 @@
         <span class="badge">Cut file / SVG</span>
       </header>
       <section class="intro">
-        <h1 id="title">Kumiko<span>02</span></h1>
+        <h1 id="title">Material<span>01</span></h1>
         <p>Set the dimensions.<br>Export the outline.<br>Take it to the cutter.</p>
       </section>
       <nav class="mode-switch" aria-label="Generator">
-        <button type="button" data-mode="kerf" aria-pressed="false">01 / Kerf test</button>
-        <button type="button" data-mode="kumiko" aria-pressed="true">02 / Kumiko</button>
+        <button type="button" data-mode="material" aria-pressed="true">01 / Material</button>
+        <button type="button" data-mode="kumiko" aria-pressed="false">02 / Pattern</button>
         <button type="button" data-mode="assembly" aria-pressed="false">03 / Assembly</button>
       </nav>
+      <section id="material-settings" class="material-settings" aria-labelledby="material-selection-title" hidden>
+        <div class="saved-materials">
+          <h2 id="material-selection-title">Select material</h2>
+          <ul id="materials-list" class="materials-list" role="radiogroup" aria-labelledby="material-selection-title"></ul>
+        </div>
+        <div class="material-add-form">
+        <h2 id="material-settings-title">Add material</h2>
+        <div class="material-fields">
+          <div class="material-name-field">
+            <label for="material-name">Material name</label>
+            <div class="input-wrap"><input id="material-name" type="text" placeholder="e.g. Birch plywood" aria-describedby="material-error" /></div>
+          </div>
+          <div>
+            <label for="material-thickness">Thickness</label>
+            <div class="input-wrap"><input id="material-thickness" type="number" min="0.5" max="50" step="any" aria-describedby="material-error" /><span>mm</span></div>
+          </div>
+          <div>
+            <label for="material-speed">Cutting speed</label>
+            <div class="input-wrap"><input id="material-speed" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="material-error" /><span>%</span></div>
+          </div>
+          <div>
+            <label for="material-power">Cutting power</label>
+            <div class="input-wrap"><input id="material-power" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="material-error" /><span>%</span></div>
+          </div>
+          <div>
+            <label for="material-kerf">Kerf</label>
+            <div class="input-wrap"><input id="material-kerf" type="number" min="0" max="1" step="any" aria-describedby="material-error" /><span>mm</span></div>
+          </div>
+        </div>
+        <p class="hint">The selected material supplies thickness and kerf to Assembly. Record your cutter’s speed and power here, then use the test below to find a snug fit.</p>
+        <p id="material-error" class="error" role="status"></p>
+        <div class="material-actions">
+          <button id="material-save" class="secondary-button" type="button">Add material</button>
+        </div>
+        <p id="material-status" class="hint" role="status"></p>
+        </div>
+      </section>
+      <h2 id="kerf-test-title" class="section-title" hidden>Kerf test</h2>
       <section class="workspace" aria-label="Cut file generator">
         <div class="controls">
           <h2 id="controls-title">Pattern &amp; panel</h2>
@@ -67,6 +105,11 @@
             <p class="hint">Measured from the panel edge to the cutouts. Boundary spokes are included in this width.</p>
           </div>
           <div id="assembly-controls" hidden>
+            <div class="tab-material">
+              <label for="assembly-material">Select material</label>
+              <select id="assembly-material" class="material-select"></select>
+              <p id="assembly-material-summary" class="hint"></p>
+            </div>
             <div id="assembly-dimensions" class="dimension-pair" data-linked="true">
               <div class="dimension-fields">
                 <label for="assembly-width">Panel width</label>
@@ -79,9 +122,9 @@
               </div>
             </div>
             <label for="assembly-thickness">Material thickness</label>
-            <div class="input-wrap"><input id="assembly-thickness" type="number" min="0.5" max="50" step="any" value="3" aria-describedby="size-error" /><span>mm</span></div>
+            <div class="input-wrap"><input id="assembly-thickness" type="number" readonly min="0.5" max="50" step="any" value="3" aria-describedby="size-error" /><span>mm</span></div>
             <label for="assembly-kerf">Cut kerf</label>
-            <div class="input-wrap"><input id="assembly-kerf" type="number" min="0" max="1" step="any" value="0.15" aria-describedby="size-error" /><span>mm</span></div>
+            <div class="input-wrap"><input id="assembly-kerf" type="number" readonly min="0" max="1" step="any" value="0.1" aria-describedby="size-error" /><span>mm</span></div>
             <label for="assembly-fingers">Fingers per front / back edge</label>
             <div class="input-wrap"><input id="assembly-fingers" type="number" min="2" max="50" step="1" value="5" aria-describedby="size-error" /><span>fingers</span></div>
             <p id="assembly-joints" class="hint" aria-live="polite"></p>
@@ -113,7 +156,7 @@
         </div>
         <div class="preview-panel">
           <div class="preview-heading"><span>DRAWING / FIT TO VIEW</span><span id="dimensions" aria-live="polite">150 × 243 mm</span></div>
-          <div class="preview" id="preview" role="img" aria-label="Kumiko panel preview"></div>
+          <div class="preview" id="preview" role="img" aria-label="Pattern panel preview"></div>
           <div id="kerf-legend" class="kerf-legend" hidden>
             <div class="legend-items"><span><i class="legend-original" aria-hidden="true"></i>Original outline</span><span><i class="legend-added" aria-hidden="true"></i>Added material (+)</span><span><i class="legend-removed" aria-hidden="true"></i>Removed material (−)</span></div>
             <label class="offset-toggle"><input id="emphasize-offset" type="checkbox" checked />Emphasize small offsets</label>
@@ -126,7 +169,39 @@
           <p class="preview-note">Preview scales to fit. Your SVG keeps the exact size.</p>
         </div>
       </section>
-      <footer><span>Lamp Maker / Workshop tools</span><span id="footer-mode">02 — Kumiko</span></footer>
+      <footer><span>Lamp Maker / Workshop tools</span><span id="footer-mode">01 — Material</span></footer>
     </main>
+    <dialog id="material-dialog" class="material-dialog" aria-labelledby="material-dialog-title">
+      <form id="material-edit-form" novalidate>
+        <h2 id="material-dialog-title">Edit material</h2>
+        <div class="material-fields">
+          <div class="material-name-field">
+            <label for="edit-material-name">Material name</label>
+            <div class="input-wrap"><input id="edit-material-name" type="text" required autofocus placeholder="e.g. Birch plywood" aria-describedby="edit-material-error" /></div>
+          </div>
+          <div>
+            <label for="edit-material-thickness">Thickness</label>
+            <div class="input-wrap"><input id="edit-material-thickness" type="number" required min="0.5" max="50" step="any" value="3" aria-describedby="edit-material-error" /><span>mm</span></div>
+          </div>
+          <div>
+            <label for="edit-material-speed">Cutting speed</label>
+            <div class="input-wrap"><input id="edit-material-speed" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="edit-material-error" /><span>%</span></div>
+          </div>
+          <div>
+            <label for="edit-material-power">Cutting power</label>
+            <div class="input-wrap"><input id="edit-material-power" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="edit-material-error" /><span>%</span></div>
+          </div>
+          <div>
+            <label for="edit-material-kerf">Kerf</label>
+            <div class="input-wrap"><input id="edit-material-kerf" type="number" required min="0" max="1" step="any" value="0.15" aria-describedby="edit-material-error" /><span>mm</span></div>
+          </div>
+        </div>
+        <p id="edit-material-error" class="error" role="status"></p>
+        <div class="material-actions">
+          <button type="submit">Save changes</button>
+          <button id="material-edit-cancel" class="secondary-button" type="button">Cancel</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>

@@ -4,11 +4,13 @@ const error = document.querySelector('#size-error');
 const preview = document.querySelector('#preview');
 const kerfInputs = ['min', 'max', 'step'].map(name => document.querySelector(`#kerf-${name}`));
 const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame'].map(name => document.querySelector(`#kumiko-${name}`));
+// Start with the declared dimensions, including when a browser restores form fields.
+kumikoInputs.forEach(input => { input.value = input.defaultValue; });
 const kumikoPattern = document.querySelector('#kumiko-pattern');
 const assemblyInputs = ['width', 'height', 'thickness', 'kerf', 'fingers'].map(name => document.querySelector(`#assembly-${name}`));
 const bottomInputs = ['offset', 'fingers'].map(name => document.querySelector(`#assembly-bottom-${name}`));
 const legInputs = ['height', 'width'].map(name => document.querySelector(`#assembly-leg-${name}`));
-let mode = 'kumiko';
+let mode = 'material';
 let currentDrawing = null;
 const number = value => String(Number(value.toFixed(6)));
 
@@ -118,11 +120,12 @@ function clipPolygon(points, distance) {
 }
 
 function kumikoDrawing() {
-  const [width, height, cellCount, strut, frame] = kumikoInputs.map(input => input.valueAsNumber);
+  const [width, height, cellCount, strut, frame] = kumikoInputs.map(input =>
+    input.value.trim() === '' || input.validity.badInput ? NaN : Number(input.value));
   const limits = [[10, 1000], [10, 1000], [1, 100], [0.5, 20], [1, 100]];
   if ([width, height, cellCount, strut, frame].some((value, index) =>
     !Number.isFinite(value) || value < limits[index][0] || value > limits[index][1])) {
-    throw new Error('Enter all Kumiko dimensions within the displayed ranges.');
+    throw new Error('Enter all pattern dimensions within the displayed ranges.');
   }
   if (!Number.isInteger(cellCount)) throw new Error('Enter a whole pattern cell count from 1 to 100.');
   if (2 * frame >= Math.min(width, height)) throw new Error('Frame must be less than half the smaller panel dimension.');
@@ -397,7 +400,7 @@ function previewContent(drawing) {
 
 function updatePreview() {
   try {
-    if (mode === 'kerf') {
+    if (mode === 'material') {
       currentDrawing = kerfDrawing(readKerfs());
     } else if (mode === 'kumiko') {
       currentDrawing = kumikoDrawing();
@@ -425,7 +428,7 @@ function updatePreview() {
     preview.innerHTML = '';
     preview.setAttribute('aria-label', 'Preview unavailable: enter valid dimensions');
   }
-  kerfInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kerf' && !currentDrawing)));
+  kerfInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'material' && !currentDrawing)));
   kumikoInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kumiko' && !currentDrawing)));
   assemblyInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
   bottomInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
@@ -438,18 +441,20 @@ function updatePreview() {
 function setMode(nextMode) {
   mode = nextMode;
   document.body.dataset.mode = mode;
-  document.querySelector('#kerf-controls').hidden = mode !== 'kerf';
+  document.querySelector('#material-settings').hidden = mode !== 'material';
+  document.querySelector('#kerf-test-title').hidden = mode !== 'material';
+  document.querySelector('#kerf-controls').hidden = mode !== 'material';
   document.querySelector('#kumiko-controls').hidden = mode !== 'kumiko';
   document.querySelector('#assembly-controls').hidden = mode !== 'assembly';
-  document.querySelector('#kerf-legend').hidden = mode !== 'kerf';
-  document.querySelector('#kerf-stroke-details').hidden = mode !== 'kerf';
+  document.querySelector('#kerf-legend').hidden = mode !== 'material';
+  document.querySelector('#kerf-stroke-details').hidden = mode !== 'material';
   document.querySelector('#assembly-preview-controls').hidden = mode !== 'assembly';
   document.querySelectorAll('[data-mode]').forEach(button => {
     if (button.tagName === 'BUTTON') button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
   });
   const settings = {
-    kerf: ['01', 'Kerf test', 'Kerf compensation', '20 mm pieces. Compensation only on the mating edges.'],
-    kumiko: ['02', 'Kumiko', 'Pattern & panel', 'Repeating geometry. A continuous lattice inside a solid frame.'],
+    material: ['01', 'Material', 'Kerf test', '20 mm pieces. Compensation only on the mating edges.'],
+    kumiko: ['02', 'Pattern', 'Pattern & panel', 'Repeating geometry. A continuous lattice inside a solid frame.'],
     assembly: ['03', 'Assembly', 'Panels & joints', 'Four walls with legs, a fitted top, and a tabbed bottom.']
   }[mode];
   const [index, title, controlsTitle, description] = settings;
@@ -459,6 +464,232 @@ function setMode(nextMode) {
   document.querySelector('#footer-mode').textContent = `${index} — ${title}`;
   updatePreview();
 }
+
+const materialNumericInputs = ['thickness', 'speed', 'power', 'kerf'].map(name => document.querySelector(`#material-${name}`));
+function validateMaterial() {
+  const messages = {
+    thickness: 'Thickness must be between 0.5 and 50 mm.',
+    speed: 'Cutting speed must be between 0 and 100%.',
+    power: 'Cutting power must be between 0 and 100%.',
+    kerf: 'Kerf must be between 0 and 1 mm.'
+  };
+  const issues = [];
+  materialNumericInputs.forEach(input => {
+    const field = input.id.replace('material-', '');
+    const optional = field === 'speed' || field === 'power';
+    const valid = (optional && input.value === '' && !input.validity.badInput)
+      || (input.value !== '' && input.validity.valid);
+    input.setAttribute('aria-invalid', String(!valid));
+    if (!valid) issues.push(messages[field]);
+  });
+  document.querySelector('#material-error').textContent = issues.join(' ');
+  return issues.length === 0;
+}
+materialNumericInputs.forEach(input => input.addEventListener('input', () => {
+  validateMaterial();
+}));
+const materialStorageKey = 'lamp-maker.materials.v1';
+const materialFields = ['name', 'thickness', 'speed', 'power', 'kerf'];
+const materialName = document.querySelector('#material-name');
+const materialSave = document.querySelector('#material-save');
+const materialStatus = document.querySelector('#material-status');
+const fallbackMaterial = { id: 'fallback-birch', name: 'Fallback Birch', thickness: '3', speed: '2', power: '90', kerf: '0.1' };
+let savedMaterials = [{ ...fallbackMaterial }];
+let selectedMaterialId = fallbackMaterial.id;
+
+function materialValues() {
+  return Object.fromEntries(materialFields.map(field => [field, document.querySelector(`#material-${field}`).value]));
+}
+function applyMaterial(values) {
+  ['thickness', 'kerf'].forEach(field => { document.querySelector(`#assembly-${field}`).value = values[field]; });
+  syncMaterialSelectors();
+  updatePreview();
+}
+function materialSummary(material) {
+  return `${material.thickness} mm thick · Speed: ${material.speed === '' ? 'unset' : material.speed + '%'} · Power: ${material.power === '' ? 'unset' : material.power + '%'} · Kerf: ${material.kerf} mm`;
+}
+function syncMaterialSelectors() {
+  const selected = savedMaterials.find(material => material.id === selectedMaterialId);
+  ['assembly'].forEach(mode => {
+    const select = document.querySelector(`#${mode}-material`);
+    select.replaceChildren(...savedMaterials.map(material => {
+      const option = document.createElement('option');
+      option.value = material.id;
+      option.textContent = material.name;
+      return option;
+    }));
+    select.value = selectedMaterialId;
+    document.querySelector(`#${mode}-material-summary`).textContent = materialSummary(selected);
+  });
+  document.querySelectorAll('input[name="selected-material"]').forEach(input => { input.checked = input.value === selectedMaterialId; });
+}
+function selectMaterial(id) {
+  const material = savedMaterials.find(value => value.id === id);
+  if (!material) return;
+  selectedMaterialId = id;
+  applyMaterial(material);
+  persistMaterials();
+}
+document.querySelector('#assembly-material').addEventListener('change', event => selectMaterial(event.target.value));
+function clearMaterialForm() {
+  materialFields.forEach(field => {
+    const input = document.querySelector(`#material-${field}`);
+    input.value = '';
+    input.setAttribute('aria-invalid', 'false');
+  });
+  document.querySelector('#material-error').textContent = '';
+}
+function persistMaterials() {
+  try {
+    localStorage.setItem(materialStorageKey, JSON.stringify({ materials: savedMaterials, selectedId: selectedMaterialId }));
+    return true;
+  } catch {
+    materialStatus.textContent = 'Local storage is unavailable. Changes will only last while this page is open.';
+    return false;
+  }
+}
+function renderMaterials() {
+  const list = document.querySelector('#materials-list');
+  list.replaceChildren();
+  materialSave.textContent = 'Add material';
+  savedMaterials.forEach(material => {
+    const item = document.createElement('li');
+    const details = document.createElement('label');
+    details.className = 'material-option';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'selected-material';
+    radio.value = material.id;
+    radio.checked = material.id === selectedMaterialId;
+    radio.setAttribute('aria-label', material.name);
+    radio.addEventListener('change', () => selectMaterial(material.id));
+    const text = document.createElement('div');
+    const name = document.createElement('strong');
+    name.textContent = material.name;
+    const summary = document.createElement('p');
+    summary.className = 'hint';
+    summary.textContent = materialSummary(material);
+    text.append(name, summary);
+    details.append(radio, text);
+    const actions = document.createElement('div');
+    actions.className = 'material-actions';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'secondary-button';
+    edit.textContent = 'Edit';
+    edit.setAttribute('aria-label', `Edit ${material.name}`);
+    edit.addEventListener('click', () => {
+      modalMaterialId = material.id;
+      materialFields.forEach(field => {
+        const input = document.querySelector(`#edit-material-${field}`);
+        input.value = material[field];
+        input.setAttribute('aria-invalid', 'false');
+      });
+      document.querySelector('#edit-material-error').textContent = '';
+      materialDialog.showModal();
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'secondary-button';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove ${material.name}`);
+    remove.addEventListener('click', () => {
+      if (material.id === fallbackMaterial.id) return;
+      savedMaterials = savedMaterials.filter(entry => entry.id !== material.id);
+      if (selectedMaterialId === material.id) {
+        selectedMaterialId = fallbackMaterial.id;
+        applyMaterial(savedMaterials.find(value => value.id === selectedMaterialId));
+      }
+      renderMaterials();
+      if (persistMaterials()) materialStatus.textContent = `${material.name} removed.`;
+    });
+    item.append(details);
+    if (material.id !== fallbackMaterial.id) {
+      actions.append(edit, remove);
+      item.append(actions);
+    }
+    list.append(item);
+  });
+  syncMaterialSelectors();
+}
+materialName.addEventListener('input', () => {
+  materialName.setAttribute('aria-invalid', 'false');
+  validateMaterial();
+});
+materialSave.addEventListener('click', () => {
+  const valid = validateMaterial();
+  const values = materialValues();
+  values.name = values.name.trim();
+  if (!values.name) {
+    materialName.setAttribute('aria-invalid', 'true');
+    document.querySelector('#material-error').textContent = `Enter a material name. ${document.querySelector('#material-error').textContent}`.trim();
+    materialName.focus();
+    return;
+  }
+  if (!valid) return;
+  materialName.value = values.name;
+  savedMaterials.push({ id: crypto.randomUUID(), ...values });
+  clearMaterialForm();
+  renderMaterials();
+  if (persistMaterials()) materialStatus.textContent = `${values.name} added.`;
+});
+const materialDialog = document.querySelector('#material-dialog');
+let modalMaterialId = null;
+document.querySelector('#material-edit-cancel').addEventListener('click', () => materialDialog.close());
+materialDialog.addEventListener('close', () => { modalMaterialId = null; });
+document.querySelector('#material-edit-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const values = {};
+  const issues = [];
+  let firstInvalid = null;
+  materialFields.forEach(field => {
+    const input = document.querySelector(`#edit-material-${field}`);
+    values[field] = field === 'name' ? input.value.trim() : input.value;
+    const valid = input.validity.valid && (field !== 'name' || values.name !== '');
+    input.setAttribute('aria-invalid', String(!valid));
+    if (!valid) {
+      firstInvalid ||= input;
+      issues.push(field === 'name' ? 'Enter a material name.' : `${input.labels[0].textContent} must be between ${input.min} and ${input.max}${field === 'speed' || field === 'power' ? '%' : ' mm'}.`);
+    }
+  });
+  document.querySelector('#edit-material-error').textContent = issues.join(' ');
+  if (firstInvalid) {
+    firstInvalid.focus();
+    return;
+  }
+  const id = modalMaterialId;
+  savedMaterials = savedMaterials.map(material => material.id === id ? { id, ...values } : material);
+  if (selectedMaterialId === id) applyMaterial(values);
+  materialDialog.close();
+  renderMaterials();
+  if (persistMaterials()) materialStatus.textContent = `${values.name} updated.`;
+  const editButton = [...document.querySelectorAll('#materials-list button')].find(button => button.getAttribute('aria-label') === `Edit ${values.name}`);
+  editButton?.focus();
+});
+try {
+  const stored = JSON.parse(localStorage.getItem(materialStorageKey));
+  const hasFields = value => value && materialFields.every(field => typeof value[field] === 'string');
+  const validRecord = value => hasFields(value) && typeof value.id === 'string' && value.name.trim()
+    && [['thickness', 0.5, 50], ['speed', 0, 100], ['power', 0, 100], ['kerf', 0, 1]].every(([field, min, max]) =>
+      ((field === 'speed' || field === 'power') && value[field] === '')
+      || (value[field].trim() !== '' && Number.isFinite(Number(value[field])) && Number(value[field]) >= min && Number(value[field]) <= max));
+  if (stored) {
+    const ids = new Set();
+    savedMaterials = Array.isArray(stored.materials) ? stored.materials.filter(value => {
+      if (!validRecord(value) || ids.has(value.id)) return false;
+      ids.add(value.id);
+      return true;
+    }) : [];
+    if (!savedMaterials.some(value => value.id === fallbackMaterial.id)) savedMaterials.unshift({ ...fallbackMaterial });
+    else savedMaterials.sort((a, b) => Number(b.id === fallbackMaterial.id) - Number(a.id === fallbackMaterial.id));
+    selectedMaterialId = savedMaterials.some(value => value.id === stored.selectedId) ? stored.selectedId : fallbackMaterial.id;
+  }
+} catch {
+  materialStatus.textContent = 'Saved settings could not be loaded. You can still edit materials on this page.';
+}
+clearMaterialForm();
+renderMaterials();
+applyMaterial(savedMaterials.find(value => value.id === selectedMaterialId));
 
 const linkedDimensionInputs = ['kumiko', 'assembly'].flatMap(generator =>
   ['width', 'height'].map(dimension => document.querySelector(`#${generator}-${dimension}`))
@@ -528,4 +759,4 @@ downloadButton.addEventListener('click', () => {
 });
 document.querySelector('#emphasize-offset').addEventListener('change', updatePreview);
 document.querySelector('#exaggerate-fingers').addEventListener('change', updatePreview);
-setMode('kumiko');
+setMode('material');
