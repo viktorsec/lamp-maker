@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#eee9d8" />
     <title>Lamp Maker — Cut files</title>
     <link rel="stylesheet" href="styles.css?v=3" />
-    <script src="app.js?v=2" defer></script>
+    <script src="app.js?v=8" defer></script>
   </head>
   <body>
     <main>
@@ -16,7 +16,6 @@
       </header>
       <section class="intro">
         <h1 id="title">Material<span>01</span></h1>
-        <p>Set the dimensions.<br>Export the outline.<br>Take it to the cutter.</p>
       </section>
       <nav class="mode-switch" aria-label="Generator">
         <button type="button" data-mode="material" aria-pressed="true">01 / Material</button>
@@ -90,6 +89,7 @@
                 <button id="kumiko-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="true" title="Unlink dimensions">φ</button>
               </div>
             </div>
+            <p class="hint">Panel dimensions and pattern are shared with Assembly.</p>
             <label for="kumiko-cell-count">Cells across width</label>
             <div class="input-wrap pattern-stepper">
               <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions size-error" />
@@ -115,12 +115,13 @@
                 <label for="assembly-width">Panel width</label>
                 <div class="input-wrap"><input id="assembly-width" type="number" min="10" max="1000" step="any" value="150" aria-describedby="size-error" /><span>mm</span></div>
                 <label for="assembly-height">Panel height</label>
-                <div class="input-wrap"><input id="assembly-height" type="number" min="10" max="1000" step="any" value="243" aria-describedby="size-error" /><span>mm</span></div>
+                <div class="input-wrap"><input id="assembly-height" type="number" min="10" max="1000" step="any" value="243" aria-describedby="assembly-height-help size-error" /><span>mm</span></div>
               </div>
               <div class="dimension-link">
                 <button id="assembly-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="true" title="Unlink dimensions">φ</button>
               </div>
             </div>
+            <p id="assembly-height-help" class="hint">Panel dimensions and pattern are shared with Pattern. Height excludes the legs; total height is panel height + leg height.</p>
             <label for="assembly-thickness">Material thickness</label>
             <div class="input-wrap"><input id="assembly-thickness" type="number" readonly min="0.5" max="50" step="any" value="3" aria-describedby="size-error" /><span>mm</span></div>
             <label for="assembly-kerf">Cut kerf</label>
@@ -142,7 +143,7 @@
               <div class="input-wrap"><input id="assembly-leg-height" type="number" min="0.5" max="100" step="any" value="10" aria-describedby="assembly-leg-help size-error" /><span>mm</span></div>
               <label for="assembly-leg-width">Leg width</label>
               <div class="input-wrap"><input id="assembly-leg-width" type="number" min="1" max="100" step="any" value="15" aria-describedby="assembly-leg-help size-error" /><span>mm</span></div>
-              <p id="assembly-leg-help" class="hint">Two legs per wall.</p>
+              <p id="assembly-leg-help" class="hint">Two legs per wall, extending below the panel height.</p>
             </fieldset>
           </div>
           <p id="size-error" class="error" role="status"></p>
@@ -163,7 +164,7 @@
             <p id="offset-note" class="hint"></p>
           </div>
           <div id="assembly-preview-controls" class="kerf-legend" hidden>
-            <label class="offset-toggle"><input id="exaggerate-fingers" type="checkbox" checked />Exaggerate finger joints</label>
+            <label class="offset-toggle"><input id="exaggerate-fingers" type="checkbox" />Exaggerate finger joints</label>
             <p id="assembly-preview-note" class="hint" aria-live="polite"></p>
           </div>
           <p class="preview-note">Preview scales to fit. Your SVG keeps the exact size.</p>
