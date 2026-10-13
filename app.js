@@ -6,6 +6,8 @@ const kerfInputs = ['min', 'max', 'step'].map(name => document.querySelector(`#k
 const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame'].map(name => document.querySelector(`#kumiko-${name}`));
 const kumikoPattern = document.querySelector('#kumiko-pattern');
 const assemblyInputs = ['width', 'height', 'thickness', 'kerf', 'fingers'].map(name => document.querySelector(`#assembly-${name}`));
+const bottomInputs = ['offset', 'fingers'].map(name => document.querySelector(`#assembly-bottom-${name}`));
+const legInputs = ['height', 'width'].map(name => document.querySelector(`#assembly-leg-${name}`));
 let mode = 'kumiko';
 let currentDrawing = null;
 const number = value => String(Number(value.toFixed(6)));
@@ -196,7 +198,6 @@ function kumikoDrawing() {
     cellDimensions: diamond
       ? `Cell: ${rounded(pitch)} mm wide · ${rounded(rowHeight * 2)} mm tall`
       : `Cell: ${rounded(pitch)} mm base · ${rounded(Math.hypot(pitch / 2, rowHeight))} mm sides`,
-    layout: `${cellCount} cells × ${rows} rows · fitted pitch ${number(pitch)} × ${number(rowHeight)} mm`,
     content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(d => `<path d="${d}" />`).join('')}</g></g>`,
     preview: `<path d="${outer} ${openings.join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`,
     filename: `kumiko-${kumikoPattern.value}-${number(width)}x${number(height)}mm.svg`,
@@ -207,7 +208,7 @@ function kumikoDrawing() {
 
 // Front/back own the corner on alternating height bands; left/right own
 // the other bands. A recessed edge is exactly one material thickness deep.
-function fingerPanelOutline(width, height, thickness, fingers, front) {
+function fingerPanelOutline(width, height, thickness, fingers, front, legHeight = 0, legWidth = 0) {
   const segments = 2 * fingers - 1;
   const pitch = height / segments;
   const inset = band => (band % 2 === 0) === front ? 0 : thickness;
@@ -225,7 +226,13 @@ function fingerPanelOutline(width, height, thickness, fingers, front) {
     points.push([width - inset(band), y]);
     if (band < segments - 1) points.push([width - inset(band + 1), y]);
   }
-  points.push([inset(segments - 1), height]);
+  const left = inset(segments - 1), right = width - left;
+  if (legHeight > 0) {
+    points.push([right, height + legHeight], [right - legWidth, height + legHeight],
+      [right - legWidth, height], [left + legWidth, height],
+      [left + legWidth, height + legHeight], [left, height + legHeight]);
+  }
+  points.push([left, height]);
   for (let band = segments - 1; band >= 0; band--) {
     const y = band * pitch;
     // The closing edge returns to the first point, avoiding a zero-length edge.
@@ -282,11 +289,26 @@ function assemblyDrawing() {
   if (!Number.isInteger(fingers)) throw new Error('Enter a whole finger count from 2 to 50.');
   if (kerf >= thickness) throw new Error('Cut kerf must be smaller than the material thickness.');
   if (panelWidth <= 2 * thickness + kerf) throw new Error('Panel width must exceed twice the material thickness plus the kerf.');
-  if (panelHeight <= thickness + kerf) throw new Error('Panel height must exceed the top thickness plus the kerf.');
-  const pitch = panelHeight / (2 * fingers - 1);
+  const legHeight = legInputs[0].valueAsNumber;
+  const legWidth = legInputs[1].valueAsNumber;
+  if (!Number.isFinite(legHeight) || legHeight < 0.5 || legHeight > 100) throw new Error('Enter a leg height from 0.5 to 100 mm.');
+  if (!Number.isFinite(legWidth) || legWidth < 1 || legWidth > 100) throw new Error('Enter a leg width from 1 to 100 mm.');
+  if (legWidth <= kerf + 0.5) throw new Error('Leg width must exceed kerf + 0.5 mm.');
+  if (panelWidth - 2 * thickness - 2 * legWidth <= kerf + 0.5) throw new Error('Reduce leg width or increase panel width to leave an opening between the legs.');
+  const bodyHeight = panelHeight - legHeight;
+  if (bodyHeight <= thickness + kerf) throw new Error('Increase panel height or reduce leg height to leave room for the wall body and top joints.');
+  const pitch = bodyHeight / (2 * fingers - 1);
   if (pitch <= kerf + 0.5) throw new Error('Use fewer fingers or a taller panel: joint segments must exceed kerf + 0.5 mm.');
   const topPitch = (panelWidth - 2 * thickness) / (2 * fingers - 1);
   if (topPitch <= kerf + 0.5) throw new Error('Use fewer fingers or a wider panel: top joint segments must exceed kerf + 0.5 mm.');
+  const [bottomOffset, bottomFingers] = bottomInputs.map(input => input.valueAsNumber);
+  const bottomPitch = (panelWidth - 2 * thickness) / (2 * bottomFingers + 1);
+  const slotTop = bodyHeight - bottomOffset - thickness;
+  if (!Number.isFinite(bottomOffset) || bottomOffset < 0.5 || bottomOffset > 1000) throw new Error('Enter a bottom clearance from 0.5 to 1,000 mm.');
+  if (!Number.isInteger(bottomFingers) || bottomFingers < 1 || bottomFingers > 50) throw new Error('Enter 1–50 bottom tabs per edge.');
+  if (bottomOffset <= kerf + 0.5) throw new Error('Bottom clearance must exceed kerf + 0.5 mm to keep the windows closed.');
+  if (slotTop <= thickness + kerf + 0.5) throw new Error('Reduce bottom clearance or increase panel height to leave material between bottom windows and top joints.');
+  if (bottomPitch <= kerf + 0.5) throw new Error('Use fewer bottom tabs or a wider panel: bottom tabs must exceed kerf + 0.5 mm.');
   const margin = 2 + kerf / 2, gap = 8 + kerf;
   const labelSpace = Math.min(panelWidth / 3, Math.max(12, panelWidth / 15));
   const width = 2 * panelWidth + gap + 2 * margin;
@@ -294,33 +316,51 @@ function assemblyDrawing() {
   // Preview depth is capped to keep fingers open and the panel bodies intact.
   // The exact cut points and exported paths always use material thickness.
   const previewScale = document.querySelector('#exaggerate-fingers').checked
-    ? Math.max(1, Math.min(4, panelWidth / (8 * thickness), panelHeight / (8 * thickness), pitch / (2 * thickness)))
+    ? Math.max(1, Math.min(4, panelWidth / (8 * thickness), bodyHeight / (8 * thickness), pitch / (2 * thickness),
+      (panelWidth - 2 * legWidth - kerf - 0.5) / (2 * thickness),
+      (thickness + bottomPitch / 2) / thickness,
+      (slotTop - kerf - 0.5) / thickness))
     : 1;
   const previewThickness = thickness * previewScale;
-  const panels = ['Front', 'Left', 'Back', 'Right', 'Top'].map((name, index) => {
-    const points = name === 'Top' ? topPanelOutline(panelWidth, thickness, fingers)
-      : fingerPanelOutline(panelWidth, panelHeight, thickness, fingers, name === 'Front' || name === 'Back');
+  const panelNames = ['Front', 'Left', 'Back', 'Right', 'Top', 'Bottom'];
+  const panels = panelNames.map((name, index) => {
+    const points = name === 'Bottom' ? topPanelOutline(panelWidth, thickness, bottomFingers + 1)
+      : name === 'Top' ? topPanelOutline(panelWidth, thickness, fingers)
+      : fingerPanelOutline(panelWidth, bodyHeight, thickness, fingers, name === 'Front' || name === 'Back', legHeight, legWidth);
     const cutPoints = compensatedOutline(points, kerf, points.map(() => true));
     const x = margin + (index % 2) * (panelWidth + gap);
     const y = margin + labelSpace + Math.floor(index / 2) * (panelHeight + labelSpace + gap);
     const previewPoints = previewScale === 1 ? cutPoints : (() => {
-      const shape = name === 'Top' ? topPanelOutline(panelWidth, previewThickness, fingers)
-        : fingerPanelOutline(panelWidth, panelHeight, previewThickness, fingers, name === 'Front' || name === 'Back');
+      const shape = name === 'Bottom' ? topPanelOutline(panelWidth, previewThickness, bottomFingers + 1)
+        : name === 'Top' ? topPanelOutline(panelWidth, previewThickness, fingers)
+        : fingerPanelOutline(panelWidth, bodyHeight, previewThickness, fingers, name === 'Front' || name === 'Back', legHeight, legWidth);
       return compensatedOutline(shape, kerf, shape.map(() => true));
     })();
-    return { name, points, cutPoints, x, y, path: outlinePath(cutPoints, x, y), previewPath: outlinePath(previewPoints, x, y) };
+    const windows = [];
+    if (index < 4) {
+      for (let tab = 0; tab < bottomFingers; tab++) {
+        const left = thickness + (2 * tab + 1) * bottomPitch;
+        const right = left + bottomPitch;
+        const points = [[left, slotTop], [right, slotTop], [right, slotTop + thickness], [left, slotTop + thickness]];
+        // Internal openings shrink by half the kerf; the cut widens them back
+        // to the nominal tab width and material thickness.
+        const cutPoints = compensatedOutline(points, -kerf, points.map(() => true));
+        windows.push({ points, cutPoints, path: outlinePath(cutPoints, x, y) });
+      }
+    }
+    return { name, points, cutPoints, windows, x, y, path: outlinePath(cutPoints, x, y), previewPath: outlinePath(previewPoints, x, y) };
   });
-  const content = `<g id="cut-outlines">${panels.map(panel => `<g id="panel-${panel.name.toLowerCase()}"><title>${panel.name}</title><path d="${panel.path}" /></g>`).join('')}</g>`;
+  const content = `<g id="cut-outlines">${panels.map(panel => `<g id="panel-${panel.name.toLowerCase()}"><title>${panel.name}</title><path d="${panel.path}" />${panel.windows.length ? `<g id="${panel.name.toLowerCase()}-bottom-windows">${panel.windows.map(window => `<path d="${window.path}" />`).join('')}</g>` : ''}</g>`).join('')}</g>`;
   return { width, height, panels, content,
     previewNote: previewScale > 1
       ? `Joint depth exaggerated ×${number(Number(previewScale.toFixed(2)))} for visibility. SVG uses exact dimensions.`
       : 'Joint depth shown at actual size. SVG uses exact dimensions.',
-    preview: panels.map(panel => `<text x="${number(panel.x)}" y="${number(panel.y - labelSpace / 4)}" fill="#202f61" stroke="none" font-family="monospace" font-size="${number(labelSpace * 0.65)}">${panel.name.toUpperCase()}</text><path d="${panel.previewPath}" fill="#c9a775" stroke="#202f61" />`).join(''),
-    joints: `${fingers} front/back fingers · ${fingers - 1} left/right and top fingers per edge · ${number(Number(pitch.toFixed(3)))} mm vertical segments · ${number(Number(topPitch.toFixed(3)))} mm top segments · ${number(thickness)} mm joint depth`,
+    preview: panels.map(panel => `<text x="${number(panel.x)}" y="${number(panel.y - labelSpace / 4)}" fill="#202f61" stroke="none" font-family="monospace" font-size="${number(labelSpace * 0.65)}">${panel.name.toUpperCase()}</text><path d="${panel.previewPath} ${panel.windows.map(window => window.path).join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`).join(''),
+    joints: `${fingers} front/back fingers · ${fingers - 1} left/right and top fingers per edge · ${number(Number(pitch.toFixed(3)))} mm vertical segments · ${number(Number(topPitch.toFixed(3)))} mm top segments · ${number(thickness)} mm joint depth · Bottom: ${bottomFingers} tabs per edge, ${number(Number(bottomPitch.toFixed(3)))} mm wide, ${number(bottomOffset)} mm clearance`,
     filename: `assembly-${number(panelWidth)}x${number(panelHeight)}mm-${number(thickness)}mm-material.svg`,
     description: `Box: ${number(panelWidth)} × ${number(panelWidth)} × ${number(panelHeight)} mm`,
-    label: `Five finger-jointed box panels: front, left, back, right, and top. Outside size ${panelWidth} by ${panelWidth} by ${panelHeight} millimeters.`,
-    hint: '5 closed panel outlines · kerf compensated · millimeter units' };
+    label: `${panels.length} box panels: ${panelNames.join(', ')}. Bottom tabs fit ${4 * bottomFingers} closed wall windows. Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall. Outside size ${panelWidth} by ${panelWidth} by ${panelHeight} millimeters.`,
+    hint: `${panels.length} panel outlines + ${4 * bottomFingers} windows · kerf compensated · millimeter units` };
 }
 
 function matingPath(points, matingEdges, x, y) {
@@ -369,7 +409,6 @@ function updatePreview() {
     dimensions.textContent = currentDrawing.description;
     preview.setAttribute('aria-label', currentDrawing.label);
     document.querySelector('#download-hint').textContent = currentDrawing.hint;
-    document.querySelector('#kumiko-layout').textContent = currentDrawing.layout || '';
     document.querySelector('#kumiko-cell-dimensions').textContent = currentDrawing.cellDimensions || '';
     document.querySelector('#assembly-joints').textContent = currentDrawing.joints || '';
     document.querySelector('#assembly-preview-note').textContent = currentDrawing.previewNote || '';
@@ -377,7 +416,6 @@ function updatePreview() {
     preview.innerHTML = `<svg viewBox="0 0 ${currentDrawing.width} ${currentDrawing.height}" aria-hidden="true" fill="none" stroke="#000000" stroke-width="0.09">${previewContent(currentDrawing)}</svg>`;
   } catch (issue) {
     currentDrawing = null;
-    document.querySelector('#kumiko-layout').textContent = '';
     document.querySelector('#kumiko-cell-dimensions').textContent = '';
     document.querySelector('#assembly-joints').textContent = '';
     document.querySelector('#assembly-preview-note').textContent = '';
@@ -390,6 +428,8 @@ function updatePreview() {
   kerfInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kerf' && !currentDrawing)));
   kumikoInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'kumiko' && !currentDrawing)));
   assemblyInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
+  bottomInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
+  legInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
   const cellCount = document.querySelector('#kumiko-cell-count').valueAsNumber;
   document.querySelector('#kumiko-decrease').disabled = !Number.isInteger(cellCount) || cellCount <= 1 || cellCount > 100;
   document.querySelector('#kumiko-increase').disabled = !Number.isInteger(cellCount) || cellCount < 1 || cellCount >= 100;
@@ -402,6 +442,7 @@ function setMode(nextMode) {
   document.querySelector('#kumiko-controls').hidden = mode !== 'kumiko';
   document.querySelector('#assembly-controls').hidden = mode !== 'assembly';
   document.querySelector('#kerf-legend').hidden = mode !== 'kerf';
+  document.querySelector('#kerf-stroke-details').hidden = mode !== 'kerf';
   document.querySelector('#assembly-preview-controls').hidden = mode !== 'assembly';
   document.querySelectorAll('[data-mode]').forEach(button => {
     if (button.tagName === 'BUTTON') button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
@@ -409,11 +450,10 @@ function setMode(nextMode) {
   const settings = {
     kerf: ['01', 'Kerf test', 'Kerf compensation', '20 mm pieces. Compensation only on the mating edges.'],
     kumiko: ['02', 'Kumiko', 'Pattern & panel', 'Repeating geometry. A continuous lattice inside a solid frame.'],
-    assembly: ['03', 'Assembly', 'Panels & joints', 'Four walls and a fitted top. Finger joints. Open bottom.']
+    assembly: ['03', 'Assembly', 'Panels & joints', 'Four walls with legs, a fitted top, and a tabbed bottom.']
   }[mode];
   const [index, title, controlsTitle, description] = settings;
   document.querySelector('#title').innerHTML = `${title}<span>${index}</span>`;
-  document.querySelector('.eyebrow').textContent = `GEOMETRY LIBRARY / 0${index}`;
   document.querySelector('#controls-title').textContent = controlsTitle;
   document.querySelector('#description').textContent = description;
   document.querySelector('#footer-mode').textContent = `${index} — ${title}`;
@@ -423,14 +463,14 @@ function setMode(nextMode) {
 const linkedDimensionInputs = ['kumiko', 'assembly'].flatMap(generator =>
   ['width', 'height'].map(dimension => document.querySelector(`#${generator}-${dimension}`))
 );
-[...kerfInputs, ...kumikoInputs, ...assemblyInputs]
+[...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs]
   .filter(input => !linkedDimensionInputs.includes(input))
   .forEach(input => input.addEventListener('input', updatePreview));
 kumikoPattern.addEventListener('change', updatePreview);
 const goldenRatio = (1 + Math.sqrt(5)) / 2;
 ['kumiko', 'assembly'].forEach(generator => {
   let anchor = 'width';
-  let linked = false;
+  let linked = true;
   const button = document.querySelector(`#${generator}-golden-ratio`);
   const group = document.querySelector(`#${generator}-dimensions`);
   function applyRatio() {
@@ -438,7 +478,7 @@ const goldenRatio = (1 + Math.sqrt(5)) / 2;
     const target = document.querySelector(`#${generator}-${anchor === 'width' ? 'height' : 'width'}`);
     // Keep invalid/incomplete edits visible and prevent exporting stale geometry.
     target.value = Number.isFinite(source) && source > 0
-      ? number(anchor === 'width' ? source * goldenRatio : source / goldenRatio)
+      ? String(Math.round(anchor === 'width' ? source * goldenRatio : source / goldenRatio))
       : '';
   }
   ['width', 'height'].forEach(dimension => {

@@ -7,7 +7,6 @@ header { display: flex; align-items: baseline; justify-content: space-between; p
 .brand-icon { display: none; }
 .badge { font-size: 11px; text-transform: uppercase; }
 .intro { display: grid; grid-template-columns: 1fr auto; align-items: end; padding: 28px 0 24px; }
-.eyebrow { font-size: 11px; margin: 0 0 8px; grid-column: 1 / -1; }
 h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(62px, 9vw, 108px); font-weight: 400; letter-spacing: -5px; line-height: .95; margin: 0; }
 h1 span { font-family: "Courier New", monospace; font-size: 14px; letter-spacing: 0; vertical-align: top; display: inline-block; margin: 8px 0 0 14px; }
 .intro > p:last-child { font-size: 12px; line-height: 1.6; max-width: 210px; margin: 0 0 4px 24px; }
@@ -80,8 +79,8 @@ body[data-mode="kerf"] h1 { font-size: clamp(56px, 8vw, 96px); }
 #offset-note { margin: 8px 0 0; }
 #assembly-controls label:not(:first-child) { margin-top: 16px; }
 #assembly-controls input { font-size: 25px; letter-spacing: -1px; }
-body[data-mode="assembly"] .preview > svg { width: 94%; max-width: none; max-height: 680px; }
-body[data-mode="assembly"] .preview { align-items: flex-start; padding-top: 20px; }
+body[data-mode="assembly"] .preview > svg { display: block; width: 100%; height: auto; max-width: none; max-height: none; }
+body[data-mode="assembly"] .preview { align-items: flex-start; padding: 8px; }
 body[data-mode="assembly"] h1 { font-size: clamp(52px, 8vw, 96px); }
 .dimension-pair { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 12px; margin-top: 16px; }
 .dimension-fields label:first-child { margin-top: 0 !important; }
@@ -91,3 +90,5 @@ body[data-mode="assembly"] h1 { font-size: clamp(52px, 8vw, 96px); }
 .ratio-button:hover { background: #202f6115; border-color: var(--ink); }
 .ratio-button[aria-pressed="true"] { background: var(--ink); color: #eee9d8; border-color: var(--ink); }
 .dimension-pair[data-linked="true"] .dimension-link::before { border-color: var(--ink); }
+.bottom-controls { min-width: 0; margin: 16px 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--rule); }
+.bottom-controls legend { padding: 0 8px 0 0; font-size: 11px; text-transform: uppercase; }

@@ -15,7 +15,6 @@
         <span class="badge">Cut file / SVG</span>
       </header>
       <section class="intro">
-        <p class="eyebrow">GEOMETRY LIBRARY / 002</p>
         <h1 id="title">Kumiko<span>02</span></h1>
         <p>Set the dimensions.<br>Export the outline.<br>Take it to the cutter.</p>
       </section>
@@ -42,59 +41,69 @@
           <div id="kumiko-controls">
             <label for="kumiko-pattern">Pattern</label>
             <select id="kumiko-pattern"><option value="asanoha">Asanoha / Hemp leaf</option><option value="triangular">Triangular lattice</option><option value="diamond">Diamond lattice</option></select>
-            <div id="kumiko-dimensions" class="dimension-pair" data-linked="false">
+            <div id="kumiko-dimensions" class="dimension-pair" data-linked="true">
               <div class="dimension-fields">
                 <label for="kumiko-width">Panel width</label>
-                <div class="input-wrap"><input id="kumiko-width" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
+                <div class="input-wrap"><input id="kumiko-width" type="number" min="10" max="1000" step="any" value="150" aria-describedby="size-error" /><span>mm</span></div>
                 <label for="kumiko-height">Panel height</label>
-                <div class="input-wrap"><input id="kumiko-height" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
+                <div class="input-wrap"><input id="kumiko-height" type="number" min="10" max="1000" step="any" value="243" aria-describedby="size-error" /><span>mm</span></div>
               </div>
               <div class="dimension-link">
-                <button id="kumiko-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="false" title="Link dimensions: height = width × 1.618">φ</button>
+                <button id="kumiko-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="true" title="Unlink dimensions">φ</button>
               </div>
             </div>
             <label for="kumiko-cell-count">Cells across width</label>
             <div class="input-wrap pattern-stepper">
-              <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions kumiko-help size-error" />
+              <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions size-error" />
               <span>cells</span>
               <button id="kumiko-decrease" type="button" aria-label="Decrease pattern cell count" title="One fewer pattern cell">−</button>
               <button id="kumiko-increase" type="button" aria-label="Increase pattern cell count" title="One more pattern cell">+</button>
             </div>
             <p id="kumiko-cell-dimensions" class="hint" aria-live="polite"></p>
             <label for="kumiko-strut">Lattice width</label>
-            <div class="input-wrap"><input id="kumiko-strut" type="number" min="0.5" max="20" step="any" value="2" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
+            <div class="input-wrap"><input id="kumiko-strut" type="number" min="0.5" max="20" step="any" value="2" aria-describedby="size-error" /><span>mm</span></div>
             <label for="kumiko-frame">Frame width</label>
-            <div class="input-wrap"><input id="kumiko-frame" type="number" min="1" max="100" step="any" value="8" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
+            <div class="input-wrap"><input id="kumiko-frame" type="number" min="1" max="100" step="any" value="8" aria-describedby="size-error" /><span>mm</span></div>
             <p class="hint">Measured from the panel edge to the cutouts. Boundary spokes are included in this width.</p>
-            <p id="kumiko-help" class="hint">Panel: 10–1,000 mm. Cells across width: 1–100 whole pattern cells. Lattice: 0.5–20 mm. Frame: 1–100 mm. Rows fit automatically to the panel height, with matching edges on all four sides.</p>
-            <p id="kumiko-layout" class="hint" aria-live="polite"></p>
-            <p class="hint">Kumiko-inspired cutouts in a single panel. Preview shows the remaining material. Export includes the outer frame and closed openings; no kerf compensation is applied.</p>
           </div>
           <div id="assembly-controls" hidden>
-            <div id="assembly-dimensions" class="dimension-pair" data-linked="false">
+            <div id="assembly-dimensions" class="dimension-pair" data-linked="true">
               <div class="dimension-fields">
                 <label for="assembly-width">Panel width</label>
-                <div class="input-wrap"><input id="assembly-width" type="number" min="10" max="1000" step="any" value="200" aria-describedby="assembly-help size-error" /><span>mm</span></div>
+                <div class="input-wrap"><input id="assembly-width" type="number" min="10" max="1000" step="any" value="150" aria-describedby="size-error" /><span>mm</span></div>
                 <label for="assembly-height">Panel height</label>
-                <div class="input-wrap"><input id="assembly-height" type="number" min="10" max="1000" step="any" value="200" aria-describedby="assembly-help size-error" /><span>mm</span></div>
+                <div class="input-wrap"><input id="assembly-height" type="number" min="10" max="1000" step="any" value="243" aria-describedby="size-error" /><span>mm</span></div>
               </div>
               <div class="dimension-link">
-                <button id="assembly-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="false" title="Link dimensions: height = width × 1.618">φ</button>
+                <button id="assembly-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="true" title="Unlink dimensions">φ</button>
               </div>
             </div>
             <label for="assembly-thickness">Material thickness</label>
-            <div class="input-wrap"><input id="assembly-thickness" type="number" min="0.5" max="50" step="any" value="3" aria-describedby="assembly-help size-error" /><span>mm</span></div>
+            <div class="input-wrap"><input id="assembly-thickness" type="number" min="0.5" max="50" step="any" value="3" aria-describedby="size-error" /><span>mm</span></div>
             <label for="assembly-kerf">Cut kerf</label>
-            <div class="input-wrap"><input id="assembly-kerf" type="number" min="0" max="1" step="any" value="0.15" aria-describedby="assembly-kerf-help size-error" /><span>mm</span></div>
+            <div class="input-wrap"><input id="assembly-kerf" type="number" min="0" max="1" step="any" value="0.15" aria-describedby="size-error" /><span>mm</span></div>
             <label for="assembly-fingers">Fingers per front / back edge</label>
-            <div class="input-wrap"><input id="assembly-fingers" type="number" min="2" max="50" step="1" value="5" aria-describedby="assembly-help size-error" /><span>fingers</span></div>
+            <div class="input-wrap"><input id="assembly-fingers" type="number" min="2" max="50" step="1" value="5" aria-describedby="size-error" /><span>fingers</span></div>
             <p id="assembly-joints" class="hint" aria-live="polite"></p>
-            <p id="assembly-help" class="hint">Width and height: 10–1,000 mm. Thickness: 0.5–50 mm. Fingers: 2–50. Finger joints (box joints) connect the vertical edges and the top. Left, right, and each top edge have one fewer finger, fitting the matching gaps.</p>
-            <p class="hint">Width sets the box’s outside width and depth; height sets its outside height, including the top. Four walls and a fitted top; bottom stays open. Labels appear in the preview; the SVG contains five named cut outlines.</p>
-            <p id="assembly-kerf-help" class="hint">Cut kerf: 0–1 mm, the full width removed by your cutter. Each outline is offset outward by half this value. Compensation is already applied; set extra cutter kerf offset to zero.</p>
+            <fieldset id="assembly-bottom-controls" class="bottom-controls">
+              <legend>Bottom panel</legend>
+              <label for="assembly-bottom-offset">Bottom clearance</label>
+              <div class="input-wrap"><input id="assembly-bottom-offset" type="number" min="0.5" max="1000" step="any" value="10" aria-describedby="assembly-bottom-help size-error" /><span>mm</span></div>
+              <label for="assembly-bottom-fingers">Bottom tabs per edge</label>
+              <div class="input-wrap"><input id="assembly-bottom-fingers" type="number" min="1" max="50" step="1" value="3" aria-describedby="assembly-bottom-help size-error" /><span>tabs</span></div>
+              <p id="assembly-bottom-help" class="hint">Clearance is measured from the top of the legs to the underside of the bottom panel. Tabs fit closed wall slots; kerf compensation is included.</p>
+            </fieldset>
+            <fieldset id="assembly-leg-controls" class="bottom-controls">
+              <legend>Legs</legend>
+              <label for="assembly-leg-height">Leg height</label>
+              <div class="input-wrap"><input id="assembly-leg-height" type="number" min="0.5" max="100" step="any" value="10" aria-describedby="assembly-leg-help size-error" /><span>mm</span></div>
+              <label for="assembly-leg-width">Leg width</label>
+              <div class="input-wrap"><input id="assembly-leg-width" type="number" min="1" max="100" step="any" value="15" aria-describedby="assembly-leg-help size-error" /><span>mm</span></div>
+              <p id="assembly-leg-help" class="hint">Two legs per wall.</p>
+            </fieldset>
           </div>
           <p id="size-error" class="error" role="status"></p>
-          <dl>
+          <dl id="kerf-stroke-details" hidden>
             <div><dt>Stroke</dt><dd><span class="color-dot" aria-hidden="true"></span>Black</dd></div>
             <div><dt>Width</dt><dd>0.01 mm · hairline</dd></div>
             <div><dt>Fill</dt><dd>None</dd></div>
@@ -103,7 +112,7 @@
           <p class="download-hint" id="download-hint">Pattern cutouts · millimeter units</p>
         </div>
         <div class="preview-panel">
-          <div class="preview-heading"><span>DRAWING / FIT TO VIEW</span><span id="dimensions" aria-live="polite">200 × 200 mm</span></div>
+          <div class="preview-heading"><span>DRAWING / FIT TO VIEW</span><span id="dimensions" aria-live="polite">150 × 243 mm</span></div>
           <div class="preview" id="preview" role="img" aria-label="Kumiko panel preview"></div>
           <div id="kerf-legend" class="kerf-legend" hidden>
             <div class="legend-items"><span><i class="legend-original" aria-hidden="true"></i>Original outline</span><span><i class="legend-added" aria-hidden="true"></i>Added material (+)</span><span><i class="legend-removed" aria-hidden="true"></i>Removed material (−)</span></div>
@@ -111,7 +120,7 @@
             <p id="offset-note" class="hint"></p>
           </div>
           <div id="assembly-preview-controls" class="kerf-legend" hidden>
-            <label class="offset-toggle"><input id="exaggerate-fingers" type="checkbox" />Exaggerate finger joints</label>
+            <label class="offset-toggle"><input id="exaggerate-fingers" type="checkbox" checked />Exaggerate finger joints</label>
             <p id="assembly-preview-note" class="hint" aria-live="polite"></p>
           </div>
           <p class="preview-note">Preview scales to fit. Your SVG keeps the exact size.</p>
