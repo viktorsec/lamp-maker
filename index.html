@@ -15,27 +15,19 @@
         <span class="badge">Cut file / SVG</span>
       </header>
       <section class="intro">
-        <p class="eyebrow">GEOMETRY LIBRARY / 001</p>
-        <h1 id="title">Square<span>01</span></h1>
+        <p class="eyebrow">GEOMETRY LIBRARY / 002</p>
+        <h1 id="title">Kumiko<span>02</span></h1>
         <p>Set the dimensions.<br>Export the outline.<br>Take it to the cutter.</p>
       </section>
       <nav class="mode-switch" aria-label="Generator">
-        <button type="button" data-mode="square" aria-pressed="true">01 / Square</button>
-        <button type="button" data-mode="kerf" aria-pressed="false">02 / Kerf test</button>
-        <button type="button" data-mode="kumiko" aria-pressed="false">03 / Kumiko</button>
+        <button type="button" data-mode="kerf" aria-pressed="false">01 / Kerf test</button>
+        <button type="button" data-mode="kumiko" aria-pressed="true">02 / Kumiko</button>
+        <button type="button" data-mode="assembly" aria-pressed="false">03 / Assembly</button>
       </nav>
       <section class="workspace" aria-label="Cut file generator">
         <div class="controls">
-          <h2 id="controls-title">Dimensions</h2>
-          <p class="description" id="description">Equal sides. Four right angles.</p>
-          <div id="square-controls">
-          <label for="size">Side length</label>
-          <div class="input-wrap">
-            <input id="size" type="number" value="100" min="1" max="1000" step="any" inputmode="decimal" aria-describedby="size-help size-error" />
-            <span>mm</span>
-          </div>
-          <p id="size-help" class="hint">Choose a size from 1 to 1,000 mm.</p>
-          </div>
+          <h2 id="controls-title">Pattern &amp; panel</h2>
+          <p class="description" id="description">Repeating geometry. A continuous lattice inside a solid frame.</p>
           <div id="kerf-controls" hidden>
             <label for="kerf-min">First kerf</label>
             <div class="input-wrap"><input id="kerf-min" type="number" min="-1" max="1" step="0.001" value="0" aria-describedby="kerf-help size-error" /><span>mm</span></div>
@@ -47,13 +39,20 @@
             <p class="hint">Only the tab, notch, and mating shoulders are adjusted. Fit each matching pair flat, edge to edge. Choose the snug fit. Compensation is already applied; set extra kerf offset to zero.</p>
             <p class="hint">Set the SVG’s “engrave-labels” group to a light line engraving before cutting the “cut-outlines” group. Labels use red hairlines (RGB 255, 0, 0); cut outlines use black hairlines.</p>
           </div>
-          <div id="kumiko-controls" hidden>
+          <div id="kumiko-controls">
             <label for="kumiko-pattern">Pattern</label>
             <select id="kumiko-pattern"><option value="asanoha">Asanoha / Hemp leaf</option><option value="triangular">Triangular lattice</option><option value="diamond">Diamond lattice</option></select>
-            <label for="kumiko-width">Panel width</label>
-            <div class="input-wrap"><input id="kumiko-width" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
-            <label for="kumiko-height">Panel height</label>
-            <div class="input-wrap"><input id="kumiko-height" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
+            <div id="kumiko-dimensions" class="dimension-pair" data-linked="false">
+              <div class="dimension-fields">
+                <label for="kumiko-width">Panel width</label>
+                <div class="input-wrap"><input id="kumiko-width" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
+                <label for="kumiko-height">Panel height</label>
+                <div class="input-wrap"><input id="kumiko-height" type="number" min="10" max="1000" step="any" value="200" aria-describedby="kumiko-help size-error" /><span>mm</span></div>
+              </div>
+              <div class="dimension-link">
+                <button id="kumiko-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="false" title="Link dimensions: height = width × 1.618">φ</button>
+              </div>
+            </div>
             <label for="kumiko-cell-count">Cells across width</label>
             <div class="input-wrap pattern-stepper">
               <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions kumiko-help size-error" />
@@ -71,6 +70,29 @@
             <p id="kumiko-layout" class="hint" aria-live="polite"></p>
             <p class="hint">Kumiko-inspired cutouts in a single panel. Preview shows the remaining material. Export includes the outer frame and closed openings; no kerf compensation is applied.</p>
           </div>
+          <div id="assembly-controls" hidden>
+            <div id="assembly-dimensions" class="dimension-pair" data-linked="false">
+              <div class="dimension-fields">
+                <label for="assembly-width">Panel width</label>
+                <div class="input-wrap"><input id="assembly-width" type="number" min="10" max="1000" step="any" value="200" aria-describedby="assembly-help size-error" /><span>mm</span></div>
+                <label for="assembly-height">Panel height</label>
+                <div class="input-wrap"><input id="assembly-height" type="number" min="10" max="1000" step="any" value="200" aria-describedby="assembly-help size-error" /><span>mm</span></div>
+              </div>
+              <div class="dimension-link">
+                <button id="assembly-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="false" title="Link dimensions: height = width × 1.618">φ</button>
+              </div>
+            </div>
+            <label for="assembly-thickness">Material thickness</label>
+            <div class="input-wrap"><input id="assembly-thickness" type="number" min="0.5" max="50" step="any" value="3" aria-describedby="assembly-help size-error" /><span>mm</span></div>
+            <label for="assembly-kerf">Cut kerf</label>
+            <div class="input-wrap"><input id="assembly-kerf" type="number" min="0" max="1" step="any" value="0.15" aria-describedby="assembly-kerf-help size-error" /><span>mm</span></div>
+            <label for="assembly-fingers">Fingers per front / back edge</label>
+            <div class="input-wrap"><input id="assembly-fingers" type="number" min="2" max="50" step="1" value="5" aria-describedby="assembly-help size-error" /><span>fingers</span></div>
+            <p id="assembly-joints" class="hint" aria-live="polite"></p>
+            <p id="assembly-help" class="hint">Width and height: 10–1,000 mm. Thickness: 0.5–50 mm. Fingers: 2–50. Finger joints (box joints) connect the vertical edges and the top. Left, right, and each top edge have one fewer finger, fitting the matching gaps.</p>
+            <p class="hint">Width sets the box’s outside width and depth; height sets its outside height, including the top. Four walls and a fitted top; bottom stays open. Labels appear in the preview; the SVG contains five named cut outlines.</p>
+            <p id="assembly-kerf-help" class="hint">Cut kerf: 0–1 mm, the full width removed by your cutter. Each outline is offset outward by half this value. Compensation is already applied; set extra cutter kerf offset to zero.</p>
+          </div>
           <p id="size-error" class="error" role="status"></p>
           <dl>
             <div><dt>Stroke</dt><dd><span class="color-dot" aria-hidden="true"></span>Black</dd></div>
@@ -78,22 +100,24 @@
             <div><dt>Fill</dt><dd>None</dd></div>
           </dl>
           <button id="download" type="button"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5" /></svg>Download SVG</button>
-          <p class="download-hint" id="download-hint">1 closed path · millimeter units</p>
+          <p class="download-hint" id="download-hint">Pattern cutouts · millimeter units</p>
         </div>
         <div class="preview-panel">
-          <div class="preview-heading"><span>DRAWING / FIT TO VIEW</span><span id="dimensions" aria-live="polite">100 × 100 mm</span></div>
-          <div class="preview" id="preview" role="img" aria-label="Preview of a 100 millimeter square">
-            <svg viewBox="0 0 120 120" aria-hidden="true"><rect x="10" y="10" width="100" height="100" fill="none" stroke="#000000" stroke-width="0.5" vector-effect="non-scaling-stroke" /></svg>
-          </div>
+          <div class="preview-heading"><span>DRAWING / FIT TO VIEW</span><span id="dimensions" aria-live="polite">200 × 200 mm</span></div>
+          <div class="preview" id="preview" role="img" aria-label="Kumiko panel preview"></div>
           <div id="kerf-legend" class="kerf-legend" hidden>
             <div class="legend-items"><span><i class="legend-original" aria-hidden="true"></i>Original outline</span><span><i class="legend-added" aria-hidden="true"></i>Added material (+)</span><span><i class="legend-removed" aria-hidden="true"></i>Removed material (−)</span></div>
             <label class="offset-toggle"><input id="emphasize-offset" type="checkbox" checked />Emphasize small offsets</label>
             <p id="offset-note" class="hint"></p>
           </div>
+          <div id="assembly-preview-controls" class="kerf-legend" hidden>
+            <label class="offset-toggle"><input id="exaggerate-fingers" type="checkbox" />Exaggerate finger joints</label>
+            <p id="assembly-preview-note" class="hint" aria-live="polite"></p>
+          </div>
           <p class="preview-note">Preview scales to fit. Your SVG keeps the exact size.</p>
         </div>
       </section>
-      <footer><span>Lamp Maker / Workshop tools</span><span id="footer-mode">01 — Square</span></footer>
+      <footer><span>Lamp Maker / Workshop tools</span><span id="footer-mode">02 — Kumiko</span></footer>
     </main>
   </body>
 </html>

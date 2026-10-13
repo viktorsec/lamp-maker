@@ -78,3 +78,16 @@ body[data-mode="kerf"] h1 { font-size: clamp(56px, 8vw, 96px); }
 .offset-toggle { display: flex; align-items: center; gap: 8px; font-size: 11px; margin: 0; cursor: pointer; }
 .offset-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--blue); }
 #offset-note { margin: 8px 0 0; }
+#assembly-controls label:not(:first-child) { margin-top: 16px; }
+#assembly-controls input { font-size: 25px; letter-spacing: -1px; }
+body[data-mode="assembly"] .preview > svg { width: 94%; max-width: none; max-height: 680px; }
+body[data-mode="assembly"] .preview { align-items: flex-start; padding-top: 20px; }
+body[data-mode="assembly"] h1 { font-size: clamp(52px, 8vw, 96px); }
+.dimension-pair { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 12px; margin-top: 16px; }
+.dimension-fields label:first-child { margin-top: 0 !important; }
+.dimension-link { position: relative; display: flex; align-items: center; justify-content: center; }
+.dimension-link::before { content: ""; position: absolute; left: -8px; right: 17px; top: 46px; bottom: 25px; border: 1px solid var(--rule); border-left: 0; }
+.ratio-button { position: relative; z-index: 1; width: 32px; height: 32px; margin: 0; padding: 0; transform: translateY(10px); justify-content: center; flex-direction: row; background: #e3deca; color: var(--ink); border: 1px solid var(--rule); font-family: Georgia, serif; font-size: 22px; font-weight: 400; }
+.ratio-button:hover { background: #202f6115; border-color: var(--ink); }
+.ratio-button[aria-pressed="true"] { background: var(--ink); color: #eee9d8; border-color: var(--ink); }
+.dimension-pair[data-linked="true"] .dimension-link::before { border-color: var(--ink); }
