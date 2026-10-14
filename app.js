@@ -18,6 +18,133 @@ let boxViewerPromise = null;
 let boxPreviewRevision = 0;
 const number = value => String(Number(value.toFixed(6)));
 
+const patternDetails = {
+  kakuasa: {
+    name: 'Kakuasa',
+    description: 'Hemp leaves arranged within squares. A geometric variation of the older hemp-leaf motif found in Heian Buddhist decoration. It symbolizes healthy growth, protection, and stability.',
+    sources: [
+      { url: 'https://engikumiko.shop/en/pages/kumikodesigns', label: 'Kawashima Tategu · Square hemp-leaf symbolism' },
+      { url: 'https://www.aisf.or.jp/~jaanus/deta/a/asanoha.htm', label: 'JAANUS · Hemp-leaf history' }
+    ]
+  },
+  kagome: {
+    name: 'Kagome',
+    description: 'Named for the “eyes,” or openings, in a woven basket. Derived from bamboo basketry, its crossing strips form stars and hexagons. It traditionally represents protection against harmful influences.',
+    sources: [
+      { url: 'https://www.kagami.jp/english/about/kiriko/', label: 'Kagami Crystal · Basket-weave motif' },
+      { url: 'https://akizakura.net/patterndictionary04/', label: 'Akizakura · Protective symbolism' }
+    ]
+  },
+  'masu-tsunagi': {
+    name: 'Masu-tsunagi',
+    description: 'Linked square measuring boxes. Rooted in everyday grain measures, the motif appears in textiles and decorative screens. It suggests growing prosperity through masu’s wordplay with “increase.”',
+    sources: [
+      { url: 'https://www.bigsandwoodworking.com/masu-tsunagi-kumiko-pattern/', label: 'Big Sand Woodworking · Name & construction' },
+      { url: 'https://www.nippon-chuko.co.jp/chuko-blog/january-2026-update-free-sashiko-pattern-download/', label: 'Nippon Chuko · Measuring-box symbolism' }
+    ]
+  },
+  rindo: {
+    name: 'Rindō',
+    description: 'Gentian flower. Its floral motif has roots in Heian court dress, later adapted into interlocking wooden flowers. The linked forms symbolize lasting bonds and good relationships.',
+    sources: [
+      { url: 'https://nirc.nanzan-u.ac.jp/journal/6/article/1047/pdf/download', label: 'Nanzan Institute · Gentian motifs in court dress (PDF)' },
+      { url: 'https://engikumiko.shop/en/pages/kumikodesigns', label: 'Kawashima Tategu · Gentian symbolism' }
+    ]
+  },
+  masu: {
+    name: 'Masu',
+    description: 'Square wooden measuring boxes. A simple lattice traditionally used in sliding screens and as a base for more elaborate patterns.',
+    sources: [
+      { url: 'https://www.bigsandwoodworking.com/masu-tsunagi-kumiko-pattern/', label: 'Big Sand Woodworking · Measuring-box name' },
+      { url: 'https://k-ino.jp/en/kumiko/what-is-kumiko/', label: 'Inomata Art · Screen-grid tradition' }
+    ]
+  },
+  asanoha: {
+    name: 'Asanoha',
+    description: 'Hemp leaves. Found on Heian Buddhist statues, it became a fashion favorite through Edo kabuki costumes. It symbolizes children’s healthy growth, echoing hemp’s vigorous, upright stems.',
+    sources: [
+      { url: 'https://www.aisf.or.jp/~jaanus/deta/a/asanoha.htm', label: 'JAANUS · Hemp-leaf history' },
+      { url: 'https://www.nippon.com/en/japan-data/h00478/traditional-japanese-patterns.html', label: 'Nippon.com · Healthy-growth symbolism' }
+    ]
+  },
+  goma: {
+    name: 'Goma',
+    description: 'Sesame plant. Found in samurai dress and decorative screens, it draws on sesame’s traditional medicinal associations. It expresses wishes for health and long life.',
+    sources: [
+      { url: 'https://japanobjects.com/features/kumiko', label: 'Japan Objects · Sesame motif in samurai dress' },
+      { url: 'https://engikumiko.shop/en/pages/kumikodesigns', label: 'Kawashima Tategu · Sesame symbolism' }
+    ]
+  },
+  sakura: {
+    name: 'Sakura',
+    description: 'Cherry blossoms. Rooted in the blossom-viewing culture of the Heian court, the motif spread through clothing and decorative arts. It represents spring and the fleeting beauty of life.',
+    sources: [
+      { url: 'https://www.loc.gov/exhibits/cherry-blossoms/cherry-blossoms-in-japanese-cultural-history.html', label: 'Library of Congress · Blossom-viewing history' },
+      { url: 'https://www.smb.museum/en/exhibitions/detail/falling-cherry-blossoms/', label: 'Asian Art Museum, Berlin · Blossom symbolism' }
+    ]
+  },
+  shokko: {
+    name: 'Shokko',
+    description: 'Named for brocade from the ancient kingdom of Shu, in present-day Sichuan. Its textile motif was adopted during the Muromachi period. The interlocking octagons and squares recall richly patterned silk.',
+    sources: [
+      { url: 'https://umma.umich.edu/objects/obi-2013-2-376/', label: 'University of Michigan Museum of Art · Shu brocade origins' },
+      { url: 'https://www.metmuseum.org/art/collection/search/55965', label: 'The Met · Edo brocade example' }
+    ]
+  },
+  senbon: {
+    name: 'Senbon',
+    description: 'Named for “a thousand slats,” describing its closely spaced bars. Associated with Kyoto townhouse façades, it belongs to a practical architectural lattice tradition. It provides privacy while admitting light.',
+    sources: [
+      { url: 'https://www.city.kyoto.lg.jp/sogo/cmsfiles/contents/0000062/62090/kyoto.pdf', label: 'Kyoto City · Thousand-slat lattice (PDF)' },
+      { url: 'https://www.nippon.com/en/guide-to-japan/gu900011/recognizing-design-features-in-kyoto%E2%80%99s-machiya-townhouses.html', label: 'Nippon.com · Townhouse lattice history' }
+    ]
+  },
+  'tsumiishi-kikko': {
+    name: 'Tsumiishi kikko',
+    description: 'Tortoise shell. A stacked-stone variation of a shell motif inherited from Chinese ornament and Heian court decoration. It symbolizes longevity.',
+    sources: [
+      { url: 'https://kumikowoodworking.com/products/tn-118/', label: 'Tanihata · Stacked-stone variation' },
+      { url: 'https://www.aisf.or.jp/~jaanus/deta/k/kikkoumon.htm', label: 'JAANUS · Tortoiseshell origins & symbolism' }
+    ]
+  },
+  triangular: {
+    name: 'Mitsukude',
+    description: 'Three intersecting directions. A triangular lattice from the decorative-screen tradition. Its repeating geometry forms the basis of many intricate floral patterns.',
+    sources: [
+      { url: 'https://k-ino.jp/en/kumiko/kumiko-technique/', label: 'Inomata Art · Three-way joints & triangular framework' },
+      { url: 'https://k-ino.jp/fr/kumiko/les-differentes-techniques/', label: 'Inomata Art · Mitsukude name' }
+    ]
+  },
+  diamond: {
+    name: 'Hishi',
+    description: 'Water chestnut. Part of the court-textile tradition, the diamond-shaped motif also appears in family crests. It represents vitality and good health, reflecting the plant’s vigorous growth.',
+    sources: [
+      { url: 'https://www.aisf.or.jp/~jaanus/deta/h/hishimon.htm', label: 'JAANUS · Diamond motifs in court textiles & crests' },
+      { url: 'https://en.thebecos.com/blogs/column/10-japanese-patterns-steeped-in-history-and-their-traditional-meaning', label: 'BECOS · Water-chestnut name & symbolism' }
+    ]
+  }
+};
+
+let boostedPatternCellCount = null;
+function adjustPatternCellCount() {
+  const input = document.querySelector('#kumiko-cell-count');
+  const count = numericValue(input);
+  const boosted = ['senbon', 'masu'].includes(kumikoPattern.value);
+  if (boosted && !boostedPatternCellCount && Number.isInteger(count) && count >= 1 && count <= 100) {
+    const adjusted = Math.min(100, Math.ceil(count * 1.5));
+    boostedPatternCellCount = { original: count, adjusted };
+    input.value = String(adjusted);
+  } else if (!boosted && boostedPatternCellCount) {
+    if (Number.isInteger(count) && count >= 1 && count <= 100) {
+      // Restore exactly after rounding or clamping; preserve manual density edits.
+      input.value = String(count === boostedPatternCellCount.adjusted
+        ? boostedPatternCellCount.original
+        : Math.max(1, Math.round(count / 1.5)));
+    }
+    boostedPatternCellCount = null;
+  }
+}
+
 function readKerfs() {
   const values = kerfInputs.map(numericValue);
   if (values.some(value => !Number.isFinite(value))) throw new Error('Enter all three kerf values.');
@@ -135,6 +262,17 @@ function kumikoDrawing({ panelWidth, panelHeight } = {}) {
   if (!Number.isInteger(cellCount)) throw new Error('Enter a whole pattern cell count from 1 to 100.');
   if (2 * frame >= Math.min(width, height)) throw new Error('Frame must be less than half the smaller panel dimension.');
   const asanoha = kumikoPattern.value === 'asanoha';
+  const goma = kumikoPattern.value === 'goma';
+  const sakura = kumikoPattern.value === 'sakura';
+  const shokko = kumikoPattern.value === 'shokko';
+  const senbon = kumikoPattern.value === 'senbon';
+  const tsumiishiKikko = kumikoPattern.value === 'tsumiishi-kikko';
+  const kakuasa = kumikoPattern.value === 'kakuasa';
+  const kagome = kumikoPattern.value === 'kagome';
+  const masuTsunagi = kumikoPattern.value === 'masu-tsunagi';
+  const rindo = kumikoPattern.value === 'rindo';
+  const masu = kumikoPattern.value === 'masu';
+  const squareGrid = kakuasa || masuTsunagi || masu;
   const diamond = kumikoPattern.value === 'diamond';
   const innerWidth = width - 2 * frame, innerHeight = height - 2 * frame;
   // Boundary spokes belong inside the frame. Put their centerlines half a
@@ -142,11 +280,19 @@ function kumikoDrawing({ panelWidth, panelHeight } = {}) {
   const latticeWidth = innerWidth + strut, latticeHeight = innerHeight + strut;
   const latticeOrigin = frame - strut / 2;
   const pitch = latticeWidth / cellCount;
-  // Whole horizontal pattern cells and an even number of rows put all four frame
-  // edges on lattice symmetry axes. Fit the two pitches to the exact opening.
-  const rows = Math.max(2, 2 * Math.round(latticeHeight / (pitch * (diamond ? 1 : Math.sqrt(3)))));
+  // Fit complete square rows, or an even number of triangular rows, to the
+  // exact opening. Rindō uses fewer rows to keep its fine intersections open.
+  const fittedRows = latticeHeight / (pitch * (diamond || shokko ? 1 : Math.sqrt(3)));
+  const rows = senbon ? 1 : squareGrid
+    ? Math.max(1, Math.round(latticeHeight / pitch))
+    : Math.max(2, 2 * (rindo ? Math.floor(fittedRows) : Math.round(fittedRows)));
   const rowHeight = latticeHeight / rows;
-  if ((rows + 1) * (cellCount + 2) * (asanoha ? 6 : diamond ? 1 : 2) > 6000) {
+  const cellLimit = senbon ? cellCount : squareGrid
+    ? rows * cellCount * (kakuasa ? 6 : masuTsunagi ? 9 : 1)
+    : shokko
+    ? (rows + 1) * (2 * cellCount + 1) * 4
+    : (rows + (kagome ? 2 : 1)) * (cellCount + 2) * (rindo ? 32 : goma ? 14 : sakura ? 12 : asanoha || tsumiishiKikko ? 6 : kagome ? 3 : diamond ? 1 : 2);
+  if (cellLimit > 6000) {
     throw new Error('Pattern is too dense. Reduce the pattern cell count or use a less elongated panel.');
   }
   const openings = [];
@@ -185,29 +331,165 @@ function kumikoDrawing({ panelWidth, panelHeight } = {}) {
       openings.push(outlinePath(polygon, 0, 0));
     }
   }
-  function addTriangle(triangle) {
-    if (!asanoha) return addOpening(triangle);
-    const center = [0, 1].map(axis => triangle.reduce((sum, p) => sum + p[axis], 0) / 3);
-    triangle.forEach((p, i) => addOpening([p, triangle[(i + 1) % 3], center]));
+  function splitCells(cells, distance) {
+    return cells.flatMap(cell => [clipPolygon(cell, distance), clipPolygon(cell, p => -distance(p))])
+      .map(cell => cell.filter((p, i) => {
+        const previous = cell[(i + cell.length - 1) % cell.length];
+        return Math.hypot(p[0] - previous[0], p[1] - previous[1]) > 1e-7;
+      }))
+      .filter(cell => cell.length >= 3 && polygonArea(cell) > 1e-6);
   }
-  for (let row = 0; row < rows + (diamond ? 1 : 0); row++) {
-    for (let column = -1; column <= cellCount; column++) {
-      const x = latticeOrigin + column * pitch + (row % 2) * pitch / 2;
-      const y = latticeOrigin + row * rowHeight;
-      if (diamond) {
-        addOpening([[x, y - rowHeight], [x + pitch / 2, y], [x, y + rowHeight], [x - pitch / 2, y]]);
-        continue;
+  function addTriangle(triangle) {
+    if (rindo) {
+      // Two cevians from each tip form the angular gentian flower and its
+      // central hexagon. Partition into convex cells before adding the webs.
+      let cells = [triangle];
+      triangle.forEach((a, i) => {
+        const b = triangle[(i + 1) % 3], c = triangle[(i + 2) % 3];
+        for (const t of [3 / 10, 7 / 10]) {
+          const end = b.map((value, axis) => value + (c[axis] - value) * t);
+          cells = splitCells(cells, p => (end[0] - a[0]) * (p[1] - a[1]) - (end[1] - a[1]) * (p[0] - a[0]));
+        }
+      });
+      cells.forEach(addOpening);
+      return;
+    }
+    if (sakura) {
+      // Clip each tip into a small triangle, then join the center to the
+      // side midpoints. The three remaining pentagons form the petals.
+      const center = [0, 1].map(axis => triangle.reduce((sum, p) => sum + p[axis], 0) / 3);
+      const between = (a, b, t) => a.map((value, axis) => value + (b[axis] - value) * t);
+      triangle.forEach((a, index) => {
+        const b = triangle[(index + 1) % 3], c = triangle[(index + 2) % 3];
+        const nextTip = between(a, b, 1 / 4), previousTip = between(a, c, 1 / 4);
+        addOpening([a, nextTip, previousTip]);
+        addOpening([nextTip, between(a, b, 1 / 2), center, between(a, c, 1 / 2), previousTip]);
+      });
+      return;
+    }
+    if (goma) {
+      // Goma adds three full-length strips parallel to the triangle's edges.
+      // Their crossings form small corner diamonds around a central triangle.
+      // Split at each strip centerline, then inset each convex opening so all
+      // strips (including the original lattice) retain the requested width.
+      let cells = [triangle];
+      triangle.forEach((a, index) => {
+        const b = triangle[(index + 1) % 3], opposite = triangle[(index + 2) % 3];
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const side = p => dx * (p[1] - a[1]) - dy * (p[0] - a[0]);
+        const offset = side(opposite) / 5;
+        cells = cells.flatMap(cell => [
+          clipPolygon(cell, p => side(p) - offset),
+          clipPolygon(cell, p => offset - side(p))
+        ]).filter(cell => cell.length >= 3 && polygonArea(cell) > 0.000001);
+      });
+      cells.forEach(addOpening);
+      return;
+    }
+    if (!asanoha && !tsumiishiKikko && !kakuasa) return addOpening(triangle);
+    const center = [0, 1].map(axis => triangle.reduce((sum, p) => sum + p[axis], 0) / 3);
+    triangle.forEach((p, i) => {
+      if (tsumiishiKikko) {
+        // Center-to-midpoint spokes make three kites per triangle. Across
+        // neighboring triangles these spokes outline stacked hexagons,
+        // while the original triangular lattice crosses their interiors.
+        const next = triangle[(i + 1) % 3], previous = triangle[(i + 2) % 3];
+        addOpening([p, p.map((value, axis) => (value + next[axis]) / 2), center,
+          p.map((value, axis) => (value + previous[axis]) / 2)]);
+      } else {
+        addOpening([p, triangle[(i + 1) % 3], center]);
       }
-      addTriangle([[x, y], [x + pitch, y], [x + pitch / 2, y + rowHeight]]);
-      addTriangle([[x, y], [x + pitch / 2, y + rowHeight], [x - pitch / 2, y + rowHeight]]);
+    });
+  }
+  if (squareGrid) {
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < cellCount; column++) {
+        const x = latticeOrigin + column * pitch, y = latticeOrigin + row * rowHeight;
+        const a = [x, y], b = [x + pitch, y], c = [x + pitch, y + rowHeight], d = [x, y + rowHeight];
+        if (kakuasa) {
+          // Alternating diagonals let the leaf spokes meet at grid vertices.
+          const triangles = (row + column) % 2 === 0 ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]];
+          triangles.forEach(addTriangle);
+        } else if (masuTsunagi) {
+          // Two parallel strips in each diagonal direction create connected
+          // measuring-cup squares, corner pentagons and edge triangles.
+          let cells = [[a, b, c, d]];
+          const u = p => (p[0] - x) / pitch, v = p => (p[1] - y) / rowHeight;
+          for (const offset of [3 / 4, 5 / 4]) cells = splitCells(cells, p => u(p) + v(p) - offset);
+          for (const offset of [-1 / 4, 1 / 4]) cells = splitCells(cells, p => u(p) - v(p) - offset);
+          cells.forEach(addOpening);
+        } else {
+          if (strut >= Math.min(pitch, rowHeight)) throw new Error('Reduce the lattice width or reduce the pattern cell count to leave open cutouts.');
+          addOpening([a, b, c, d]);
+        }
+      }
+    }
+  } else if (kagome) {
+    // A trihexagonal tiling: hexagons touch at vertices and leave a triangle
+    // in every gap. It uses three continuous families of parallel strips.
+    for (let row = -1; row <= rows; row++) {
+      for (let column = -1; column <= cellCount; column++) {
+        const x = latticeOrigin + column * pitch + ((row % 2 + 2) % 2) * pitch / 2;
+        const y = latticeOrigin + row * rowHeight;
+        addOpening([[-0.5, 0], [-0.25, -0.5], [0.25, -0.5], [0.5, 0], [0.25, 0.5], [-0.25, 0.5]]
+          .map(([u, v]) => [x + u * pitch, y + v * rowHeight]));
+        addOpening([[x + pitch / 2, y], [x + 3 * pitch / 4, y + rowHeight / 2], [x + pitch / 4, y + rowHeight / 2]]);
+        addOpening([[x - pitch / 4, y + rowHeight / 2], [x + pitch / 4, y + rowHeight / 2], [x, y + rowHeight]]);
+      }
+    }
+  } else if (senbon) {
+    // Full-height parallel slats are joined by the frame at both ends.
+    // Unlike the repeating motifs, Senbon has no horizontal interior grid.
+    if (strut >= pitch) {
+      throw new Error('Reduce the lattice width or reduce the pattern cell count to leave open cutouts.');
+    }
+    for (let column = 0; column < cellCount; column++) {
+      const x = latticeOrigin + column * pitch, y = latticeOrigin;
+      addOpening([[x, y], [x + pitch, y], [x + pitch, y + latticeHeight], [x, y + latticeHeight]]);
+    }
+  } else if (shokko) {
+    // A checkerboard of octagons and squares, crossed by a straight grid.
+    // Two center spacings make one complete repeat; even counts keep the
+    // opposite frame edges on matching symmetry axes.
+    const radius = 1 / Math.sqrt(2), corner = 1 - radius;
+    for (let row = 0; row <= rows; row++) {
+      for (let column = 0; column <= 2 * cellCount; column++) {
+        const quarter = (row + column) % 2 === 0
+          ? [[0, 0], [radius, 0], [radius, corner], [corner, radius], [0, radius]]
+          : [[0, 0], [corner, 0], [corner, corner], [0, corner]];
+        for (let turn = 0; turn < 4; turn++) {
+          addOpening(quarter.map(point => {
+            let [x, y] = point;
+            for (let rotation = 0; rotation < turn; rotation++) [x, y] = [-y, x];
+            return [latticeOrigin + (column + x) * pitch / 2, latticeOrigin + (row + y) * rowHeight];
+          }));
+        }
+      }
+    }
+  } else {
+    for (let row = 0; row < rows + (diamond ? 1 : 0); row++) {
+      for (let column = -1; column <= cellCount; column++) {
+        const x = latticeOrigin + column * pitch + (row % 2) * pitch / 2;
+        const y = latticeOrigin + row * rowHeight;
+        if (diamond) {
+          addOpening([[x, y - rowHeight], [x + pitch / 2, y], [x, y + rowHeight], [x - pitch / 2, y]]);
+          continue;
+        }
+        addTriangle([[x, y], [x + pitch, y], [x + pitch / 2, y + rowHeight]]);
+        addTriangle([[x, y], [x + pitch / 2, y + rowHeight], [x - pitch / 2, y + rowHeight]]);
+      }
     }
   }
   if (!openings.length) throw new Error('No openings fit inside the frame. Reduce frame or lattice width, or increase the panel size.');
   const outer = outlinePath([[0, 0], [width, 0], [width, height], [0, height]], 0, 0);
-  const name = asanoha ? 'Asanoha' : diamond ? 'Diamond lattice' : 'Triangular lattice';
+  const name = patternDetails[kumikoPattern.value].name;
   const rounded = value => number(Number(value.toFixed(3)));
   return { width, height, openingPolygons, patternName: name,
-    cellDimensions: diamond
+    cellDimensions: senbon
+      ? `Cell: ${rounded(pitch)} mm wide · ${rounded(latticeHeight)} mm tall`
+      : squareGrid || kagome
+      ? `Cell: ${rounded(pitch)} mm wide · ${rounded(rowHeight)} mm tall`
+      : diamond || shokko
       ? `Cell: ${rounded(pitch)} mm wide · ${rounded(rowHeight * 2)} mm tall`
       : `Cell: ${rounded(pitch)} mm base · ${rounded(Math.hypot(pitch / 2, rowHeight))} mm sides`,
     content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(d => `<path d="${d}" />`).join('')}</g></g>`,
@@ -462,6 +744,9 @@ function updateBoxPreview(drawing) {
   document.querySelector('#box-error').textContent = '';
   document.querySelector('#box-dimensions').textContent = drawing.description;
   document.querySelector('#box-material').textContent = `${savedMaterials.find(material => material.id === selectedMaterialId).name} · ${number(drawing.model.thickness)} mm`;
+  const details = patternDetails[kumikoPattern.value];
+  document.querySelector('#box-pattern-name').textContent = details.name;
+  document.querySelector('#box-pattern-description').textContent = details.description;
   stage.setAttribute('aria-label', `Assembled 3D box. ${drawing.label}`);
   loading.hidden = false;
   stage.hidden = true;
@@ -566,6 +851,7 @@ document.querySelector('#box-lamp').addEventListener('change', event => {
 });
 
 function updatePreview() {
+  document.querySelector('#kumiko-pattern-description').textContent = patternDetails[kumikoPattern.value].description;
   try {
     if (mode === 'material') {
       currentDrawing = kerfDrawing(readKerfs());
@@ -887,7 +1173,10 @@ const linkedDimensionInputs = ['kumiko', 'assembly'].flatMap(generator =>
 [...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs]
   .filter(input => !linkedDimensionInputs.includes(input))
   .forEach(input => input.addEventListener('input', updatePreview));
-kumikoPattern.addEventListener('change', updatePreview);
+kumikoPattern.addEventListener('change', () => {
+  adjustPatternCellCount();
+  updatePreview();
+});
 const goldenRatio = (1 + Math.sqrt(5)) / 2;
 let dimensionAnchor = 'width';
 let dimensionsLinked = true;

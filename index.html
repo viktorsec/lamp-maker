@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#eee9d8" />
     <title>Lamp Maker — Cut files</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="styles.css?v=9" />
-    <script src="app.js?v=47" defer></script>
+    <link rel="stylesheet" href="styles.css?v=11" />
+    <script src="app.js?v=56" defer></script>
   </head>
   <body>
     <main>
@@ -77,13 +77,17 @@
           <p class="description">Inspect the assembled box with paper lining and a warm light inside.</p>
           <p id="box-material" class="hint"></p>
           <div class="box-toggles">
-            <label class="offset-toggle"><input id="box-paper" type="checkbox" />Paper lining</label>
+            <label class="offset-toggle"><input id="box-paper" type="checkbox" checked />Paper lining</label>
             <label class="offset-toggle"><input id="box-lamp" type="checkbox" />Lamp on</label>
           </div>
           <div class="box-light-control">
             <label for="box-environment">Environment light <output id="box-environment-value" for="box-environment">100%</output></label>
             <input id="box-environment" type="range" min="0" max="100" step="1" value="100" aria-valuetext="100%" />
           </div>
+          <section class="box-pattern-details" aria-labelledby="box-pattern-name">
+            <h3 id="box-pattern-name"></h3>
+            <p id="box-pattern-description"></p>
+          </section>
           <button id="box-reset" class="secondary-button" type="button">Reset view</button>
         </aside>
       </section>
@@ -104,7 +108,22 @@
           </div>
           <div id="kumiko-controls">
             <label for="kumiko-pattern">Pattern</label>
-            <select id="kumiko-pattern"><option value="asanoha">Asanoha / Hemp leaf</option><option value="triangular">Triangular lattice</option><option value="diamond">Diamond lattice</option></select>
+            <select id="kumiko-pattern" aria-describedby="kumiko-pattern-description">
+              <option value="senbon">Senbon / Vertical slats</option>
+              <option value="masu">Masu / Square lattice</option>
+              <option value="diamond" selected>Hishi / Diamond lattice</option>
+              <option value="triangular">Mitsukude / Triangular lattice</option>
+              <option value="kagome">Kagome / Basket weave</option>
+              <option value="tsumiishi-kikko">Tsumiishi kikko / Stacked hexagons</option>
+              <option value="asanoha">Asanoha / Hemp leaf</option>
+              <option value="shokko">Shokko / Octagons &amp; squares</option>
+              <option value="kakuasa">Kakuasa / Square hemp leaf</option>
+              <option value="masu-tsunagi">Masu-tsunagi / Linked squares</option>
+              <option value="sakura">Sakura / Cherry blossom</option>
+              <option value="goma">Goma / Sesame</option>
+              <option value="rindo">Rindō / Gentian</option>
+            </select>
+            <p id="kumiko-pattern-description" class="hint" aria-live="polite"></p>
             <div id="kumiko-dimensions" class="dimension-pair" data-linked="true">
               <div class="dimension-fields">
                 <label for="kumiko-width">Panel width</label>

@@ -149,6 +149,9 @@ input[readonly] { opacity: .7; }
 .box-light-control { margin-bottom: 32px; }
 .box-light-control label { display: flex; justify-content: space-between; gap: 12px; }
 .box-light-control input[type="range"] { padding: 0; margin: 4px 0; height: 24px; accent-color: var(--blue); cursor: pointer; }
+.box-pattern-details { margin-bottom: 24px; padding-top: 20px; border-top: 1px solid var(--rule); }
+.box-pattern-details h3 { margin: 0 0 8px; font-size: 14px; line-height: 1.4; }
+.box-pattern-details p { margin: 0 0 10px; font-size: 11px; line-height: 1.6; }
 .box-controls .secondary-button { background: transparent; color: var(--ink); border-color: var(--ink); justify-content: center; }
 .box-controls .secondary-button:hover { background: #202f6115; }
 @media (max-width: 700px) { .box-preview { grid-template-columns: 1fr; } .box-stage { height: 60vh; min-height: 340px; } .box-preview .preview-heading { flex-wrap: wrap; } }
