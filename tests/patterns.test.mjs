@@ -164,3 +164,50 @@ test('new pattern exports remain valid on square, wide and tall panels', () => {
     }
   }
 });
+
+
+test('bottom cord notch defaults to 8 mm and stays centered with kerf compensation', () => {
+  const { context, set } = generators();
+  assert.equal(context.assemblyDrawing().model.cordDiameter, 8);
+  for (const tabs of [2, 4]) {
+    set('assembly-bottom-fingers', tabs);
+    for (const diameter of [4, 8, 12]) {
+      set('assembly-bottom-cord-diameter', diameter);
+      const drawing = context.assemblyDrawing();
+      const bottom = drawing.panels.find(panel => panel.name === 'Bottom');
+      const { panelWidth: width, thickness } = drawing.model;
+      const center = width / 2;
+      const radius = diameter / 2;
+      const arc = bottom.points.filter(([x, y]) => x >= center - radius - 1e-8 && x <= center + radius + 1e-8 && y > thickness);
+      assert.equal(arc.length, 65);
+      arc.forEach(([x, y]) => assert.ok(Math.abs(Math.hypot(x - center, y - thickness - radius) - radius) < 1e-8));
+      assert.ok(Math.abs(Math.max(...arc.map(p => p[1])) - thickness - diameter) < 1e-8);
+      const kerf = 0.1;
+      const cutArc = bottom.cutPoints.filter(([x, y]) => x >= center - radius && x <= center + radius && y > thickness);
+      assert.equal(cutArc.length, 65);
+      cutArc.forEach(([x, y]) => assert.ok(Math.abs(Math.hypot(x - center, y - thickness - radius) - (radius - kerf / 2)) < 1e-8));
+      assert.ok(bottom.path.includes('L'));
+      assert.doesNotMatch(context.generateSvg(drawing), /NaN|Infinity/);
+      const material = new THREE.MeshBasicMaterial();
+      const box = buildBoxModel(drawing, [material, material], material);
+      const bottomMesh = box.children.find(mesh => mesh.name === 'Bottom');
+      const ray = new THREE.Raycaster(new THREE.Vector3(center, -(thickness + radius), thickness + 1), new THREE.Vector3(0, 0, -1));
+      bottomMesh.position.set(0, 0, 0);
+      bottomMesh.rotation.set(0, 0, 0);
+      bottomMesh.updateMatrixWorld(true);
+      assert.equal(ray.intersectObject(bottomMesh, true).length, 0, 'Wood and paper must leave the cord exit open');
+      box.traverse(object => object.geometry?.dispose());
+      material.dispose();
+    }
+  }
+});
+
+test('cord diameter rejects invalid values and collisions with bottom tabs', () => {
+  const { context, set } = generators();
+  for (const value of ['', 0, -1, 101, 'NaN']) {
+    set('assembly-bottom-cord-diameter', value);
+    assert.throws(() => context.assemblyDrawing(), /cord diameter/i);
+  }
+  set('assembly-bottom-cord-diameter', 30);
+  assert.throws(() => context.assemblyDrawing(), /fewer bottom tabs/);
+});

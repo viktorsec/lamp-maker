@@ -1,10 +1,12 @@
 import * as THREE from './vendor/three/three.module.js';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
-import { buildBoxModel } from './preview-geometry.js';
-import { lampPosition, lampOutput, paperRadiance, paperGroundLighting, attachPaperLighting } from './preview-lighting.js?v=2';
+import { buildBoxModel } from './preview-geometry.js?v=2';
+import { buildCord } from './preview-cord.js?v=5';
+import { buildPuck } from './preview-puck.js?v=3';
+import { lampPosition, lampOutput, paperRadiance, paperGroundLighting, attachPaperLighting, attachPaperEmissionOcclusion } from './preview-lighting.js?v=5';
 
-export { buildBoxModel, buildPaperLining } from './preview-geometry.js';
-export { lampPosition, lampOutput, paperRadiance, paperGroundLighting } from './preview-lighting.js?v=2';
+export { buildBoxModel, buildPaperLining } from './preview-geometry.js?v=2';
+export { lampPosition, lampOutput, paperRadiance, paperGroundLighting } from './preview-lighting.js?v=5';
 
 export function createBoxViewer(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -63,9 +65,6 @@ export function createBoxViewer(container) {
   lampLight.shadow.bias = -0.000002;
   lampLight.shadow.radius = 3;
   scene.add(lampLight);
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0xffedbf }));
-  bulb.visible = false;
-  scene.add(bulb);
   const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 10000);
   const controls = new OrbitControls(camera, canvas);
   controls.enablePan = false;
@@ -78,11 +77,14 @@ export function createBoxViewer(container) {
     new THREE.MeshStandardMaterial({ color: 0x81522b, roughness: 0.95 })
   ];
   const paperMaterial = new THREE.MeshStandardMaterial({ color: 0xfff8e8, roughness: 1, side: THREE.DoubleSide, shadowSide: THREE.BackSide });
+  const paperEmission = attachPaperEmissionOcclusion(paperMaterial);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ roughness: 1, toneMapped: false }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
   let model = null;
+  let cord = null;
+  let puck = null;
   let geometryKey = '';
   let visible = true;
   let radius = 1;
@@ -128,7 +130,7 @@ export function createBoxViewer(container) {
     lampLight.intensity = value ? lampIntensity : 0;
     paperLighting.paperEnabled.value = value && paperEnabled ? 1 : 0;
     paperLighting.paperColor.value.setHex(0xffbd72).multiply(floor.material.color).multiplyScalar(1 / Math.PI);
-    bulb.visible = value;
+    if (puck) puck.getObjectByName('White diffuser').material.emissiveIntensity = value ? 1.1 : 0;
     // An emissive paper surface approximates light transmitted through the lining.
     paperMaterial.emissive.setHex(value ? 0xffbb67 : 0x000000);
     paperMaterial.emissiveIntensity = value ? paperEmissiveIntensity : 0;
@@ -212,6 +214,19 @@ export function createBoxViewer(container) {
         model.traverse(object => object.geometry?.dispose());
       }
       model = nextModel;
+      if (cord) {
+        scene.remove(cord);
+        cord.geometry.dispose();
+        cord.material.dispose();
+      }
+      if (puck) {
+        scene.remove(puck);
+        puck.traverse(object => { object.geometry?.dispose(); object.material?.dispose(); });
+      }
+      puck = buildPuck(drawing.model);
+      scene.add(puck);
+      cord = buildCord(drawing.model);
+      if (cord) scene.add(cord);
       geometryKey = nextKey;
       scene.add(model);
 
@@ -253,12 +268,11 @@ export function createBoxViewer(container) {
       // Let illumination fade by inverse-square distance, without a cutoff.
       lampLight.distance = 0;
       const floorTop = drawing.model.totalHeight / 2 - drawing.model.bodyHeight + drawing.model.bottomOffset + drawing.model.thickness;
+      paperEmission.paperBottomTop.value = floorTop;
       lampLight.shadow.camera.near = Math.max(0.1, Math.min(drawing.model.panelWidth * 0.02, (lampLight.position.y - floorTop) * 0.2));
       lampLight.shadow.camera.far = radius * 160;
       lampLight.shadow.normalBias = Math.min(drawing.model.thickness * 0.01, 0.02);
       lampLight.shadow.camera.updateProjectionMatrix();
-      bulb.position.copy(lampLight.position);
-      bulb.scale.setScalar(Math.min(drawing.model.panelWidth * 0.02, (drawing.model.bodyHeight - drawing.model.bottomOffset - 2 * drawing.model.thickness) * 0.06));
       container.dataset.lampPosition = JSON.stringify(lampLight.position.toArray());
       keyLight.position.set(radius * 2, radius * 3, radius * 2);
       fillLight.position.set(-radius * 2, radius, -radius);

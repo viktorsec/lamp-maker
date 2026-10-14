@@ -18,13 +18,26 @@ function panelPath(points, PathClass) {
 // Assemble the finished, nominal panels. Kerf offsets and visual joint
 // exaggeration belong to cut files and the flat preview, not the finished box.
 export function buildPaperLining(panel, model, material) {
-  const { panelWidth: width, bodyHeight, thickness } = model;
+  const { panelWidth: width, bodyHeight, thickness, bottomOffset } = model;
   const wall = !['Top', 'Bottom'].includes(panel.name);
   const inset = thickness + 0.2;
-  const bottom = wall ? bodyHeight - 0.2 : width - inset;
-  // Cover the pattern openings, but leave the joints, legs and bottom slots clear.
-  const shape = panelPath([[inset, inset], [width - inset, inset], [width - inset, bottom], [inset, bottom]], THREE.Shape);
-  shape.holes = panel.windows.map(window => panelPath(window.points, THREE.Path));
+  const bottom = wall ? bodyHeight - bottomOffset - thickness : width - inset;
+  // Wall lining ends at the upper face of the bottom plate, above its slots.
+  const outline = [[inset, inset], [width - inset, inset], [width - inset, bottom], [inset, bottom]];
+  if (panel.name === 'Bottom' && model.cordDiameter) {
+    const radius = model.cordDiameter / 2;
+    const notch = [[width / 2 - radius, inset]];
+    for (let step = 0; step <= 64; step++) {
+      const angle = Math.PI * (1 - step / 64);
+      notch.push([width / 2 + radius * Math.cos(angle), thickness + radius + radius * Math.sin(angle)]);
+    }
+    notch.push([width / 2 + radius, inset]);
+    outline.splice(1, 0, ...notch);
+  }
+  const shape = panelPath(outline, THREE.Shape);
+  shape.holes = panel.windows
+    .filter(window => window.points.every(([x, y]) => x > inset && x < width - inset && y > inset && y < bottom))
+    .map(window => panelPath(window.points, THREE.Path));
   const paperThickness = Math.min(0.12, thickness * 0.05);
   const geometry = new THREE.ExtrudeGeometry(shape, { depth: paperThickness, steps: 1, bevelEnabled: false, curveSegments: 1 });
   const paper = new THREE.Mesh(geometry, material);

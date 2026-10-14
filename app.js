@@ -6,7 +6,7 @@ const kerfInputs = ['min', 'max', 'step'].map(name => document.querySelector(`#k
 const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame'].map(name => document.querySelector(`#kumiko-${name}`));
 const kumikoPattern = document.querySelector('#kumiko-pattern');
 const assemblyInputs = ['width', 'height', 'thickness', 'kerf', 'fingers'].map(name => document.querySelector(`#assembly-${name}`));
-const bottomInputs = ['offset', 'fingers'].map(name => document.querySelector(`#assembly-bottom-${name}`));
+const bottomInputs = ['offset', 'fingers', 'cord-diameter'].map(name => document.querySelector(`#assembly-bottom-${name}`));
 const legInputs = ['height', 'width'].map(name => document.querySelector(`#assembly-leg-${name}`));
 // Initialize every generator before applying the selected material.
 [...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs].forEach(input => { input.value = input.defaultValue; });
@@ -608,6 +608,28 @@ function topPanelOutline(width, thickness, fingers) {
   return cleanOrthogonalOutline(points);
 }
 
+// A U-shaped cord exit in the center gap between bottom tabs. The rounded
+// end seats a full cord diameter inside the wall, with an open route to the edge.
+function bottomPanelOutline(width, thickness, fingers, diameter, kerf = 0) {
+  const outline = topPanelOutline(width, thickness, fingers + 1);
+  const points = compensatedOutline(outline, kerf, outline.map(() => true));
+  const center = width / 2;
+  const radius = diameter / 2;
+  const cutRadius = radius - kerf / 2;
+  const notch = [[center - cutRadius, thickness - kerf / 2]];
+  for (let step = 0; step <= 64; step++) {
+    const angle = Math.PI * (1 - step / 64);
+    notch.push([center + cutRadius * Math.cos(angle), thickness + radius + cutRadius * Math.sin(angle)]);
+  }
+  notch.push([center + cutRadius, thickness - kerf / 2]);
+  const edge = outline.findIndex((point, index) => {
+    const next = outline[(index + 1) % outline.length];
+    return point[1] === thickness && next[1] === thickness && point[0] < center && next[0] > center;
+  });
+  points.splice(edge + 1, 0, ...notch);
+  return points;
+}
+
 function assemblyDrawing() {
   const [panelWidth, panelHeight, thickness, kerf, fingers] = assemblyInputs.map(numericValue);
   const values = [panelWidth, panelHeight, thickness, kerf, fingers];
@@ -631,14 +653,17 @@ function assemblyDrawing() {
   if (pitch <= kerf + 0.5) throw new Error('Use fewer fingers or a taller panel: joint segments must exceed kerf + 0.5 mm.');
   const topPitch = (panelWidth - 2 * thickness) / (2 * fingers - 1);
   if (topPitch <= kerf + 0.5) throw new Error('Use fewer fingers or a wider panel: top joint segments must exceed kerf + 0.5 mm.');
-  const [bottomOffset, bottomFingers] = bottomInputs.map(numericValue);
+  const [bottomOffset, bottomFingers, cordDiameter] = bottomInputs.map(numericValue);
   const bottomPitch = (panelWidth - 2 * thickness) / (2 * bottomFingers + 1);
   const slotTop = bodyHeight - bottomOffset - thickness;
   if (!Number.isFinite(bottomOffset) || bottomOffset < 0.5 || bottomOffset > 1000) throw new Error('Enter a bottom clearance from 0.5 to 1,000 mm.');
-  if (!Number.isInteger(bottomFingers) || bottomFingers < 1 || bottomFingers > 50) throw new Error('Enter 1–50 bottom tabs per edge.');
+  if (![2, 4].includes(bottomFingers)) throw new Error('Choose 2 or 4 bottom tabs per edge.');
   if (bottomOffset <= kerf + 0.5) throw new Error('Bottom clearance must exceed kerf + 0.5 mm to keep the windows closed.');
   if (slotTop <= thickness + kerf + 0.5) throw new Error('Reduce bottom clearance or increase panel height to leave material between bottom windows and top joints.');
   if (bottomPitch <= kerf + 0.5) throw new Error('Use fewer bottom tabs or a wider panel: bottom tabs must exceed kerf + 0.5 mm.');
+  if (!Number.isFinite(cordDiameter) || cordDiameter < 1 || cordDiameter > 100) throw new Error('Enter a cord diameter from 1 to 100 mm.');
+  if (cordDiameter <= kerf + 0.5) throw new Error('Cord diameter must exceed kerf + 0.5 mm.');
+  if (cordDiameter + kerf + 0.5 >= bottomPitch) throw new Error('Reduce cord diameter or use fewer bottom tabs to leave material beside the cord notch.');
   const pattern = kumikoDrawing();
   const latticeWidth = numericValue(document.querySelector('#kumiko-strut'));
   const frameWidth = numericValue(document.querySelector('#kumiko-frame'));
@@ -661,22 +686,24 @@ function assemblyDrawing() {
     ? Math.max(1, Math.min(4, (patternEdge - web) / thickness, panelWidth / (8 * thickness), bodyHeight / (8 * thickness), pitch / (2 * thickness),
       (panelWidth - 2 * legWidth - kerf - 0.5) / (2 * thickness),
       (thickness + bottomPitch / 2) / thickness,
+      (panelWidth - (cordDiameter + kerf + 0.5) * (2 * bottomFingers + 1)) / (2 * thickness),
       (slotTop - kerf - 0.5) / thickness))
     : 1;
   const previewThickness = thickness * previewScale;
   const panelNames = ['Front', 'Left', 'Back', 'Right', 'Top', 'Bottom'];
   const panels = panelNames.map((name, index) => {
-    const points = name === 'Bottom' ? topPanelOutline(panelWidth, thickness, bottomFingers + 1)
+    const points = name === 'Bottom' ? bottomPanelOutline(panelWidth, thickness, bottomFingers, cordDiameter)
       : name === 'Top' ? topPanelOutline(panelWidth, thickness, fingers)
       : fingerPanelOutline(panelWidth, bodyHeight, thickness, fingers, name === 'Front' || name === 'Back', legHeight, legWidth);
-    const cutPoints = compensatedOutline(points, kerf, points.map(() => true));
+    const cutPoints = name === 'Bottom' ? bottomPanelOutline(panelWidth, thickness, bottomFingers, cordDiameter, kerf)
+      : compensatedOutline(points, kerf, points.map(() => true));
     const x = margin + (index % 2) * (panelWidth + gap);
     const y = margin + labelSpace + Math.floor(index / 2) * (totalHeight + labelSpace + gap);
     const previewPoints = previewScale === 1 ? cutPoints : (() => {
-      const shape = name === 'Bottom' ? topPanelOutline(panelWidth, previewThickness, bottomFingers + 1)
+      const shape = name === 'Bottom' ? bottomPanelOutline(panelWidth, previewThickness, bottomFingers, cordDiameter, kerf)
         : name === 'Top' ? topPanelOutline(panelWidth, previewThickness, fingers)
         : fingerPanelOutline(panelWidth, bodyHeight, previewThickness, fingers, name === 'Front' || name === 'Back', legHeight, legWidth);
-      return compensatedOutline(shape, kerf, shape.map(() => true));
+      return name === 'Bottom' ? shape : compensatedOutline(shape, kerf, shape.map(() => true));
     })();
     const windows = [];
     if (index < 4) {
@@ -696,15 +723,15 @@ function assemblyDrawing() {
   });
   const content = `<g id="cut-outlines">${panels.map(panel => `<g id="panel-${panel.name.toLowerCase()}"><title>${panel.name}</title><path d="${panel.path}" />${panel.openings.length ? `<g id="${panel.name.toLowerCase()}-pattern-openings">${panel.openings.map(opening => `<path d="${opening.path}" />`).join('')}</g>` : ''}${panel.windows.length ? `<g id="${panel.name.toLowerCase()}-bottom-windows">${panel.windows.map(window => `<path d="${window.path}" />`).join('')}</g>` : ''}</g>`).join('')}</g>`;
   return { width, height, panels, content,
-    model: { panelWidth, bodyHeight, thickness, legHeight, bottomOffset, totalHeight },
+    model: { panelWidth, bodyHeight, thickness, legHeight, bottomOffset, cordDiameter, totalHeight },
     previewNote: previewScale > 1
       ? `Joint depth exaggerated ×${number(Number(previewScale.toFixed(2)))} for visibility. SVG uses exact dimensions.`
       : 'Joint depth shown at actual size. SVG uses exact dimensions.',
     preview: panels.map(panel => `<text x="${number(panel.x)}" y="${number(panel.y - labelSpace / 4)}" fill="#202f61" stroke="none" font-family="monospace" font-size="${number(labelSpace * 0.65)}">${panel.name.toUpperCase()}</text><path d="${panel.previewPath} ${panel.openings.map(opening => opening.path).join(' ')} ${panel.windows.map(window => window.path).join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`).join(''),
-    joints: `${fingers} front/back fingers · ${fingers - 1} left/right and top fingers per edge · ${number(Number(pitch.toFixed(3)))} mm vertical segments · ${number(Number(topPitch.toFixed(3)))} mm top segments · ${number(thickness)} mm joint depth · Bottom: ${bottomFingers} tabs per edge, ${number(Number(bottomPitch.toFixed(3)))} mm wide, ${number(bottomOffset)} mm clearance`,
+    joints: `${fingers} front/back fingers · ${fingers - 1} left/right and top fingers per edge · ${number(Number(pitch.toFixed(3)))} mm vertical segments · ${number(Number(topPitch.toFixed(3)))} mm top segments · ${number(thickness)} mm joint depth · Bottom: ${bottomFingers} tabs per edge, ${number(Number(bottomPitch.toFixed(3)))} mm wide, ${number(bottomOffset)} mm clearance · ${number(cordDiameter)} mm cord notch`,
     filename: `assembly-${kumikoPattern.value}-${number(panelWidth)}x${number(panelHeight)}mm-${number(legHeight)}mm-legs-${number(thickness)}mm-material.svg`,
     description: `Box: ${number(panelWidth)} × ${number(panelWidth)} × ${number(totalHeight)} mm (including legs)`,
-    label: `${panels.length} box panels: ${panelNames.join(', ')}. ${pattern.patternName} pattern with ${patternOpenings.length} cutouts per side wall and ${topOpenings.length} in the top. Bottom tabs fit ${4 * bottomFingers} closed wall windows. Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall. Outside size ${panelWidth} by ${panelWidth} by ${totalHeight} millimeters including legs. Wall body height ${panelHeight} millimeters.`,
+    label: `${panels.length} box panels: ${panelNames.join(', ')}. ${pattern.patternName} pattern with ${patternOpenings.length} cutouts per side wall and ${topOpenings.length} in the top. Bottom tabs fit ${4 * bottomFingers} closed wall windows. A ${number(cordDiameter)} millimeter cord notch opens from the center of one bottom edge. Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall. Outside size ${panelWidth} by ${panelWidth} by ${totalHeight} millimeters including legs. Wall body height ${panelHeight} millimeters.`,
     hint: `${panels.length} panel outlines + ${4 * patternOpenings.length + topOpenings.length} pattern cutouts + ${4 * bottomFingers} windows · kerf compensated · millimeter units` };
 }
 
@@ -754,7 +781,7 @@ function updateBoxPreview(drawing) {
   loading.hidden = false;
   stage.hidden = true;
   if (!boxViewerPromise) {
-    boxViewerPromise = import('./preview3d.js?v=38').then(module => {
+    boxViewerPromise = import('./preview3d.js?v=44').then(module => {
       boxViewer = module.createBoxViewer(stage);
       boxViewer.setVisible(mode === 'preview');
       return boxViewer;
@@ -1176,6 +1203,12 @@ const linkedDimensionInputs = ['kumiko', 'assembly'].flatMap(generator =>
 [...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs]
   .filter(input => !linkedDimensionInputs.includes(input))
   .forEach(input => input.addEventListener('input', updatePreview));
+const bottomTabButtons = [...document.querySelectorAll('[data-bottom-tabs]')];
+bottomTabButtons.forEach(button => button.addEventListener('click', () => {
+  document.querySelector('#assembly-bottom-fingers').value = button.dataset.bottomTabs;
+  bottomTabButtons.forEach(option => option.setAttribute('aria-pressed', String(option === button)));
+  updatePreview();
+}));
 const patternPicker = new PatternPicker(kumikoPattern, value => {
   const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, frame: 2 });
   return `<svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">${drawing.preview}</svg>`;

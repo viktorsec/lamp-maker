@@ -39,16 +39,28 @@ test('triangular and diamond openings have visible inner walls near every vertex
   mesh.geometry.dispose();
 });
 
-test('paper bottom-slot walls face into their openings', () => {
-  const hole = [[16, 50], [30, 50], [30, 53], [16, 53]];
-  const paper = buildPaperLining({ name: 'Front', windows: [{ points: hole }] }, model, materials[0]);
-  paper.position.set(0, 0, 0);
-  paper.updateMatrixWorld(true);
-  assertVisibleHoleWalls(paper, [hole], paper.geometry.parameters.options.depth);
-  paper.geometry.dispose();
+test('wall paper stops at the bottom plate and leaves bottom slots and lower walls bare', () => {
+  for (const bottomOffset of [5, 10, 25]) {
+    const settings = { ...model, bottomOffset };
+    const slotTop = settings.bodyHeight - bottomOffset - settings.thickness;
+    const hole = [[16, slotTop], [30, slotTop], [30, slotTop + settings.thickness], [16, slotTop + settings.thickness]];
+    for (const name of ['Front', 'Back', 'Left', 'Right']) {
+      const paper = buildPaperLining({ name, windows: [{ points: hole }] }, settings, materials[0]);
+      paper.geometry.computeBoundingBox();
+      assert.equal(paper.geometry.boundingBox.min.y, -slotTop);
+      assert.equal(paper.geometry.parameters.shapes.holes.length, 0, 'Bottom slots must sit outside the paper outline');
+      paper.position.set(0, 0, 0);
+      paper.updateMatrixWorld(true);
+      const ray = new THREE.Raycaster(new THREE.Vector3(40, -slotTop - 1, 1), new THREE.Vector3(0, 0, -1));
+      assert.equal(ray.intersectObject(paper).length, 0, 'No lining below the plate');
+      ray.ray.origin.y = -slotTop + 1;
+      assert.ok(ray.intersectObject(paper).length > 0, 'Lining still covers the wall above the plate');
+      paper.geometry.dispose();
+    }
+  }
 });
 
-test('raised bulb remains inside the cavity, including short boxes', () => {
+test('puck light source remains inside the cavity, including short boxes', () => {
   for (const settings of [model, { ...model, panelWidth: 150, bodyHeight: 243, totalHeight: 253 }, { ...model, panelWidth: 1000 }, { ...model, bodyHeight: 26, totalHeight: 36 }]) {
     const position = lampPosition(settings);
     const base = settings.totalHeight / 2 - settings.bodyHeight + settings.bottomOffset + settings.thickness;
@@ -115,8 +127,78 @@ test('paper loses energy and follows the bulb output and inverse-square falloff'
 });
 
 
-test('default bulb is raised by 20 mm', () => {
+test('white puck with silver base rests on the bottom plate', async () => {
+  const { buildPuck } = await import('../preview-puck.js');
+  const { puckDimensions } = await import('../preview-lighting.js');
   const settings = { ...model, panelWidth: 150, bodyHeight: 243, totalHeight: 253 };
-  const base = settings.totalHeight / 2 - settings.bodyHeight + settings.bottomOffset + settings.thickness;
-  assert.equal(lampPosition(settings).y - base, 37.5 + 20);
+  const dimensions = puckDimensions(settings);
+  const puck = buildPuck(settings);
+  puck.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(puck);
+  assert.ok(Math.abs(bounds.min.y - dimensions.floorTop) < 1e-6);
+  assert.ok(Math.abs(bounds.max.y - dimensions.floorTop - dimensions.height) < 1e-6);
+  assert.equal(puck.getObjectByName('White diffuser').material.color.getHex(), 0xffffff);
+  assert.ok(puck.getObjectByName('Silver base').material.metalness > 0.5);
+  assert.ok(lampPosition(settings).y > bounds.max.y);
+  puck.traverse(object => { object.geometry?.dispose(); object.material?.dispose(); });
+});
+
+test('preview cord passes through the rear notch with a thin, long, curved tail', async () => {
+  const { buildCord } = await import('../preview-cord.js');
+  for (const cordDiameter of [1, 8, 12]) {
+    const settings = { ...model, cordDiameter };
+    const cord = buildCord(settings);
+    const path = cord.userData.path;
+    const { puckDimensions } = await import('../preview-lighting.js');
+    const puck = puckDimensions(settings);
+    assert.equal(path.getPoint(0).z, -puck.radius * 0.98);
+    assert.ok(path.getPoint(0).y >= puck.floorTop + cord.userData.radius);
+    assert.ok(path.getPoint(0).y < puck.floorTop + puck.baseHeight);
+    const passage = path.curves[1];
+    const panelY = settings.totalHeight / 2 - settings.bodyHeight + settings.bottomOffset + settings.thickness / 2;
+    assert.ok(passage.v1.y > panelY && passage.v2.y < panelY);
+    assert.equal(passage.v1.x, 0);
+    assert.equal(passage.v1.z, -settings.panelWidth / 2 + settings.thickness + cordDiameter / 2);
+    assert.ok(cord.userData.radius < cordDiameter / 2);
+    assert.ok(path.getPoint(1).z < -settings.panelWidth / 2);
+    assert.ok(path.getPoint(1).z < -settings.panelWidth);
+    assert.ok(cord.userData.radius <= 1.25);
+    assert.ok(path.curves.slice(2).every(curve => curve.isCubicBezierCurve3));
+    for (let index = 1; index < path.curves.length; index++) {
+      const before = path.curves[index - 1].getTangent(1);
+      const after = path.curves[index].getTangent(0);
+      assert.ok(before.dot(after) > 0.99, 'Cable bends should have continuous tangents');
+    }
+    assert.equal(cord.visible, true);
+    assert.equal(cord.material.opacity, 1);
+    const colors = cord.geometry.getAttribute('color');
+    assert.equal(colors.getW(0), 1);
+    assert.equal(colors.getW(colors.count - 1), 0);
+    assert.ok(Array.from({ length: colors.count }, (_, i) => colors.getW(i)).some(alpha => alpha > 0 && alpha < 1));
+    assert.ok(cord.geometry.attributes.position.array.every(Number.isFinite));
+    cord.geometry.dispose();
+    cord.material.dispose();
+  }
+});
+
+
+test('shadow light retains its original elevated position independently of the puck', () => {
+  const settings = { ...model, panelWidth: 150, bodyHeight: 243, totalHeight: 253 };
+  const floorTop = settings.totalHeight / 2 - settings.bodyHeight + settings.bottomOffset + settings.thickness;
+  assert.equal(lampPosition(settings).y - floorTop, 37.5 + 20);
+});
+
+
+test('paper below the bottom plate emits no lamp light onto the ground', () => {
+  const settings = { ...model, bottomOffset: 25 };
+  const lightThroughWindow = (top, bottom) => {
+    const panel = { name: 'Front', points: [[0, 0], [80, 0], [80, 80], [0, 80]],
+      openings: [{ points: [[10, top], [70, top], [70, bottom], [10, bottom]] }], windows: [] };
+    const box = buildBoxModel({ model: settings, panels: [panel] }, materials, materials[0]);
+    const light = paperGroundLighting(box, settings.thickness, -45, 320, 16, 48);
+    box.traverse(object => object.geometry?.dispose());
+    return light;
+  };
+  assert.ok(lightThroughWindow(58, 76).every(value => value === 0), 'Lining under the opaque plate must stay unlit');
+  assert.ok(lightThroughWindow(15, 45).some(value => value > 0), 'Lining above the plate must still transmit light');
 });

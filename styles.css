@@ -90,6 +90,11 @@ body:is([data-mode="kumiko"], [data-mode="assembly"]) .preview { align-items: fl
 .dimension-pair[data-linked="true"] .dimension-link::before { border-color: var(--ink); }
 .bottom-controls { min-width: 0; margin: 16px 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--rule); }
 .bottom-controls legend { padding: 0 8px 0 0; font-size: 11px; text-transform: uppercase; }
+.segmented-control { display: flex; }
+.segmented-control button { flex: 1; justify-content: center; margin: 0; padding: 10px; background: #f6f2e4; color: var(--ink); border: 1px solid var(--ink); }
+.segmented-control button + button { border-left: 0; }
+.segmented-control button:hover { background: #202f6115; }
+.segmented-control button[aria-pressed="true"] { background: var(--ink); color: #eee9d8; }
 
 .material-settings { margin-bottom: 20px; padding: 24px; border: 1px solid var(--ink); background: #e3deca; }
 .material-settings h2 { margin-bottom: 20px; }

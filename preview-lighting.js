@@ -11,12 +11,19 @@ function fieldCoordinate(value, warp) {
   return warp ? Math.sign(value) * Math.expm1(Math.abs(value) * warp) / Math.expm1(warp) : value;
 }
 
+export function puckDimensions(model) {
+  const cavity = model.bodyHeight - model.bottomOffset - 2 * model.thickness;
+  const height = Math.min(9, cavity * 0.2);
+  return { radius: Math.min(30, (model.panelWidth - 2 * model.thickness) * 0.22), height,
+    baseHeight: height * 0.4,
+    floorTop: model.totalHeight / 2 - model.bodyHeight + model.bottomOffset + model.thickness };
+}
+
 export function lampPosition(model) {
   const { panelWidth, totalHeight, bodyHeight, bottomOffset, thickness } = model;
   const floorTop = totalHeight / 2 - bodyHeight + bottomOffset + thickness;
   const cavityHeight = bodyHeight - bottomOffset - 2 * thickness;
-  // Raise the original near-base position by 20 mm, keeping clearance from
-  // the top if the user makes the box unusually short.
+  // Preserve the established shadow projection independently of the visible puck.
   const elevation = Math.min(Math.min(panelWidth * 0.25, cavityHeight * 0.25) + 20, cavityHeight * 0.95);
   return new THREE.Vector3(0, floorTop + elevation, 0);
 }
@@ -35,6 +42,23 @@ export function paperRadiance(source, point, normal, intensity) {
   return intensity * incidence / distanceSquared * transmission / Math.PI;
 }
 
+// Paper emission bypasses shadow maps. Mask only its lamp glow below the
+// opaque bottom plate; ambient light and the paper geometry remain intact.
+export function attachPaperEmissionOcclusion(material) {
+  const uniforms = { paperBottomTop: { value: 0 } };
+  material.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float paperWorldHeight;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\npaperWorldHeight = (modelMatrix * vec4(transformed, 1.0)).y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float paperWorldHeight;\nuniform float paperBottomTop;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= step(paperBottomTop, paperWorldHeight);');
+  };
+  material.customProgramCacheKey = () => 'paper-bottom-occlusion-v1';
+  return uniforms;
+}
+
 // Integrate Lambertian transmission over the paper, then test each ray at
 // both wood faces. This avoids inventing a few directional spotlight beams.
 export function paperGroundLighting(box, thickness, floorY, extent, resolution = PAPER_FIELD.resolution, subdivisions = PAPER_FIELD.samples, warp = 0) {
@@ -48,6 +72,7 @@ export function paperGroundLighting(box, thickness, floorY, extent, resolution =
   };
   const coordinate = value => fieldCoordinate(value, warp);
   const faces = [];
+  const bottomTop = puckDimensions(box.userData.model).floorTop;
   box.updateMatrixWorld(true);
   for (const panel of box.children) {
     if (['Top', 'Bottom'].includes(panel.name)) continue; // Top radiates upward.
@@ -83,6 +108,8 @@ export function paperGroundLighting(box, thickness, floorY, extent, resolution =
     for (let y = 0; y < subdivisions; y++) for (let x = 0; x < subdivisions; x++) {
       const sx = bounds.min.x + (x + 0.5) / subdivisions * size.x;
       const sy = bounds.min.y + (y + 0.5) / subdivisions * size.y;
+      const worldHeight = paper.localToWorld(new THREE.Vector3(sx, sy, 0)).y;
+      if (worldHeight < bottomTop) continue;
       if (aperture(sx, sy) && !paperSlots.some(slot => contains(slot, sx, sy))) {
         const radiance = paperRadiance(source, new THREE.Vector3(sx, sy, -0.02), new THREE.Vector3(0, 0, -1), intensity);
         samples.push([sx, sy, panel.position.y + sy - floorY, radiance]);

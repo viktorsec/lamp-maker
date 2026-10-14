@@ -180,8 +180,15 @@
               <legend>Bottom panel</legend>
               <label for="assembly-bottom-offset">Bottom clearance</label>
               <div class="input-wrap"><input id="assembly-bottom-offset" type="number" min="0.5" max="1000" step="any" value="10" aria-describedby="assembly-bottom-help size-error" /><span>mm</span></div>
-              <label for="assembly-bottom-fingers">Bottom tabs per edge</label>
-              <div class="input-wrap"><input id="assembly-bottom-fingers" type="number" min="1" max="50" step="1" value="3" aria-describedby="assembly-bottom-help size-error" /><span>tabs</span></div>
+              <label id="assembly-bottom-tabs-label">Bottom tabs per edge</label>
+              <input id="assembly-bottom-fingers" type="hidden" value="2" />
+              <div class="segmented-control" role="group" aria-labelledby="assembly-bottom-tabs-label" aria-describedby="assembly-bottom-help">
+                <button type="button" data-bottom-tabs="2" aria-pressed="true">2</button>
+                <button type="button" data-bottom-tabs="4" aria-pressed="false">4</button>
+              </div>
+              <label for="assembly-bottom-cord-diameter">Cord diameter</label>
+              <div class="input-wrap"><input id="assembly-bottom-cord-diameter" type="number" min="1" max="100" step="any" value="8" aria-describedby="assembly-cord-help size-error" /><span>mm</span></div>
+              <p id="assembly-cord-help" class="hint">Rounded cord notch at the center of one bottom edge. Width matches the cord diameter; kerf compensation is included.</p>
               <p id="assembly-bottom-help" class="hint">Clearance is measured from the top of the legs to the underside of the bottom panel. Tabs fit closed wall slots; kerf compensation is included.</p>
             </fieldset>
             <fieldset id="assembly-leg-controls" class="bottom-controls">
