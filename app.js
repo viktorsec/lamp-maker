@@ -250,8 +250,11 @@ function clipPolygon(points, distance) {
   return result;
 }
 
-function kumikoDrawing({ panelWidth, panelHeight } = {}) {
-  const [inputWidth, inputHeight, cellCount, strut, frame] = kumikoInputs.map(numericValue);
+function kumikoDrawing({ panelWidth, panelHeight, pattern = kumikoPattern.value, cellCount, strut, frame } = {}) {
+  const [inputWidth, inputHeight, inputCellCount, inputStrut, inputFrame] = kumikoInputs.map(numericValue);
+  cellCount ??= inputCellCount;
+  strut ??= inputStrut;
+  frame ??= inputFrame;
   const width = panelWidth ?? inputWidth;
   const height = panelHeight ?? inputHeight;
   const limits = [[10, 1000], [10, 1000], [1, 100], [0.5, 20], [1, 100]];
@@ -261,19 +264,19 @@ function kumikoDrawing({ panelWidth, panelHeight } = {}) {
   }
   if (!Number.isInteger(cellCount)) throw new Error('Enter a whole pattern cell count from 1 to 100.');
   if (2 * frame >= Math.min(width, height)) throw new Error('Frame must be less than half the smaller panel dimension.');
-  const asanoha = kumikoPattern.value === 'asanoha';
-  const goma = kumikoPattern.value === 'goma';
-  const sakura = kumikoPattern.value === 'sakura';
-  const shokko = kumikoPattern.value === 'shokko';
-  const senbon = kumikoPattern.value === 'senbon';
-  const tsumiishiKikko = kumikoPattern.value === 'tsumiishi-kikko';
-  const kakuasa = kumikoPattern.value === 'kakuasa';
-  const kagome = kumikoPattern.value === 'kagome';
-  const masuTsunagi = kumikoPattern.value === 'masu-tsunagi';
-  const rindo = kumikoPattern.value === 'rindo';
-  const masu = kumikoPattern.value === 'masu';
+  const asanoha = pattern === 'asanoha';
+  const goma = pattern === 'goma';
+  const sakura = pattern === 'sakura';
+  const shokko = pattern === 'shokko';
+  const senbon = pattern === 'senbon';
+  const tsumiishiKikko = pattern === 'tsumiishi-kikko';
+  const kakuasa = pattern === 'kakuasa';
+  const kagome = pattern === 'kagome';
+  const masuTsunagi = pattern === 'masu-tsunagi';
+  const rindo = pattern === 'rindo';
+  const masu = pattern === 'masu';
   const squareGrid = kakuasa || masuTsunagi || masu;
-  const diamond = kumikoPattern.value === 'diamond';
+  const diamond = pattern === 'diamond';
   const innerWidth = width - 2 * frame, innerHeight = height - 2 * frame;
   // Boundary spokes belong inside the frame. Put their centerlines half a
   // lattice width outside the opening so their inner edges meet it exactly.
@@ -482,7 +485,7 @@ function kumikoDrawing({ panelWidth, panelHeight } = {}) {
   }
   if (!openings.length) throw new Error('No openings fit inside the frame. Reduce frame or lattice width, or increase the panel size.');
   const outer = outlinePath([[0, 0], [width, 0], [width, height], [0, height]], 0, 0);
-  const name = patternDetails[kumikoPattern.value].name;
+  const name = patternDetails[pattern].name;
   const rounded = value => number(Number(value.toFixed(3)));
   return { width, height, openingPolygons, patternName: name,
     cellDimensions: senbon
@@ -494,7 +497,7 @@ function kumikoDrawing({ panelWidth, panelHeight } = {}) {
       : `Cell: ${rounded(pitch)} mm base · ${rounded(Math.hypot(pitch / 2, rowHeight))} mm sides`,
     content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(d => `<path d="${d}" />`).join('')}</g></g>`,
     preview: `<path d="${outer} ${openings.join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`,
-    filename: `kumiko-${kumikoPattern.value}-${number(width)}x${number(height)}mm.svg`,
+    filename: `kumiko-${pattern}-${number(width)}x${number(height)}mm.svg`,
     description: `${number(width)} × ${number(height)} mm`,
     label: `${name} Kumiko panel, ${number(width)} by ${number(height)} millimeters, with ${openings.length} cutouts`,
     hint: `${openings.length} closed cutouts + outer frame · millimeter units` };
@@ -1173,7 +1176,12 @@ const linkedDimensionInputs = ['kumiko', 'assembly'].flatMap(generator =>
 [...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs]
   .filter(input => !linkedDimensionInputs.includes(input))
   .forEach(input => input.addEventListener('input', updatePreview));
+const patternPicker = new PatternPicker(kumikoPattern, value => {
+  const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, frame: 2 });
+  return `<svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">${drawing.preview}</svg>`;
+});
 kumikoPattern.addEventListener('change', () => {
+  patternPicker.sync();
   adjustPatternCellCount();
   updatePreview();
 });

@@ -167,3 +167,27 @@ input[readonly] { opacity: .7; }
 :root[data-theme="dark"] .box-controls .secondary-button:hover { background: #eee9d820; }
 :root[data-theme="dark"] .mode-switch button[aria-pressed="true"]:hover { background: var(--ink); }
 :root[data-theme="dark"] .error { color: #ffb59d; }
+
+.pattern-picker-trigger { display: flex; flex-direction: row; gap: 10px; width: 100%; margin: 0; padding: 8px; min-height: 66px; text-align: left; color: var(--ink); background: #f6f2e4; border: 1px solid var(--ink); border-bottom-width: 2px; font-weight: 400; }
+.pattern-picker-trigger:hover { color: var(--ink); background: #eee9d8; }
+.pattern-picker-swatch { display: block; flex: 0 0 58px; width: 58px; height: 44px; overflow: hidden; background: #f6f2e4; border: 1px solid var(--rule); }
+.pattern-picker-swatch svg { display: block; width: 100%; height: 100%; }
+.pattern-picker-text { flex: 1; min-width: 0; line-height: 1.4; }
+.pattern-picker-text strong { display: block; font-size: 12px; }
+.pattern-picker-text small { display: block; margin-top: 3px; font-size: 10px; }
+.pattern-picker-arrow { font-size: 20px; }
+.pattern-picker-trigger[aria-expanded="true"] .pattern-picker-arrow { transform: rotate(180deg); }
+.pattern-picker-list { position: fixed; z-index: 20; overflow-y: auto; overscroll-behavior: contain; padding: 4px; background: #f6f2e4; border: 1px solid var(--ink); box-shadow: 4px 6px 0 #202f6124; }
+.pattern-picker-option { display: flex; align-items: center; gap: 10px; padding: 8px; min-height: 62px; cursor: pointer; border: 1px solid transparent; color: var(--ink); }
+.pattern-picker-option + .pattern-picker-option { border-top-color: var(--rule); }
+.pattern-picker-option:hover, .pattern-picker-option:focus { background: #202f6110; outline: none; }
+.pattern-picker-option:focus-visible { border-color: var(--blue); outline: 2px solid var(--blue); outline-offset: -2px; }
+.pattern-picker-option[aria-selected="true"] { background: #202f6118; }
+.pattern-picker-check { width: 14px; flex: 0 0 14px; visibility: hidden; }
+.pattern-picker-option[aria-selected="true"] .pattern-picker-check { visibility: visible; }
+:root[data-theme="dark"] .pattern-picker-trigger,
+:root[data-theme="dark"] .pattern-picker-list { background: #252d39; }
+:root[data-theme="dark"] .pattern-picker-trigger:hover,
+:root[data-theme="dark"] .pattern-picker-option:hover,
+:root[data-theme="dark"] .pattern-picker-option:focus { background: #343e50; }
+:root[data-theme="dark"] .pattern-picker-option[aria-selected="true"] { background: #3e4961; }
