@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#eee9d8" />
     <title>Lamp Maker — Cut files</title>
-    <link rel="stylesheet" href="styles.css?v=3" />
-    <script src="app.js?v=8" defer></script>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="styles.css?v=9" />
+    <script src="app.js?v=47" defer></script>
   </head>
   <body>
     <main>
@@ -21,6 +22,7 @@
         <button type="button" data-mode="material" aria-pressed="true">01 / Material</button>
         <button type="button" data-mode="kumiko" aria-pressed="false">02 / Pattern</button>
         <button type="button" data-mode="assembly" aria-pressed="false">03 / Assembly</button>
+        <button type="button" data-mode="preview" aria-pressed="false">04 / Preview</button>
       </nav>
       <section id="material-settings" class="material-settings" aria-labelledby="material-selection-title" hidden>
         <div class="saved-materials">
@@ -60,6 +62,31 @@
         </div>
       </section>
       <h2 id="kerf-test-title" class="section-title" hidden>Kerf test</h2>
+      <section id="box-preview" class="box-preview" aria-label="Assembled box preview" hidden>
+        <div class="preview-panel">
+          <div class="preview-heading"><span>ASSEMBLED BOX / 3D</span><span id="box-dimensions" aria-live="polite"></span></div>
+          <div id="box-stage" class="box-stage">
+            <div id="box-canvas" class="box-canvas" role="img" aria-label="3D assembled box"></div>
+            <p id="box-loading" class="hint" role="status">Loading 3D preview…</p>
+            <p id="box-error" class="error" role="status"></p>
+          </div>
+          <p class="preview-note">Drag to rotate · Scroll to zoom · Arrow keys to rotate</p>
+        </div>
+        <aside class="controls box-controls" aria-label="Preview options">
+          <h2>View &amp; lighting</h2>
+          <p class="description">Inspect the assembled box with paper lining and a warm light inside.</p>
+          <p id="box-material" class="hint"></p>
+          <div class="box-toggles">
+            <label class="offset-toggle"><input id="box-paper" type="checkbox" />Paper lining</label>
+            <label class="offset-toggle"><input id="box-lamp" type="checkbox" />Lamp on</label>
+          </div>
+          <div class="box-light-control">
+            <label for="box-environment">Environment light <output id="box-environment-value" for="box-environment">100%</output></label>
+            <input id="box-environment" type="range" min="0" max="100" step="1" value="100" aria-valuetext="100%" />
+          </div>
+          <button id="box-reset" class="secondary-button" type="button">Reset view</button>
+        </aside>
+      </section>
       <section class="workspace" aria-label="Cut file generator">
         <div class="controls">
           <h2 id="controls-title">Pattern &amp; panel</h2>

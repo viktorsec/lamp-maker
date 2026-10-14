@@ -9,10 +9,13 @@ const assemblyInputs = ['width', 'height', 'thickness', 'kerf', 'fingers'].map(n
 const bottomInputs = ['offset', 'fingers'].map(name => document.querySelector(`#assembly-bottom-${name}`));
 const legInputs = ['height', 'width'].map(name => document.querySelector(`#assembly-leg-${name}`));
 // Initialize every generator before applying the selected material.
-[...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs].forEach(input => { input.value = input.defaultValue; });
+[...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs].forEach(input => { input.value = input.defaultValue; });
 const numericValue = input => input.value.trim() === '' || input.validity.badInput ? NaN : Number(input.value);
 let mode = 'material';
 let currentDrawing = null;
+let boxViewer = null;
+let boxViewerPromise = null;
+let boxPreviewRevision = 0;
 const number = value => String(Number(value.toFixed(6)));
 
 function readKerfs() {
@@ -408,6 +411,7 @@ function assemblyDrawing() {
   });
   const content = `<g id="cut-outlines">${panels.map(panel => `<g id="panel-${panel.name.toLowerCase()}"><title>${panel.name}</title><path d="${panel.path}" />${panel.openings.length ? `<g id="${panel.name.toLowerCase()}-pattern-openings">${panel.openings.map(opening => `<path d="${opening.path}" />`).join('')}</g>` : ''}${panel.windows.length ? `<g id="${panel.name.toLowerCase()}-bottom-windows">${panel.windows.map(window => `<path d="${window.path}" />`).join('')}</g>` : ''}</g>`).join('')}</g>`;
   return { width, height, panels, content,
+    model: { panelWidth, bodyHeight, thickness, legHeight, bottomOffset, totalHeight },
     previewNote: previewScale > 1
       ? `Joint depth exaggerated ×${number(Number(previewScale.toFixed(2)))} for visibility. SVG uses exact dimensions.`
       : 'Joint depth shown at actual size. SVG uses exact dimensions.',
@@ -451,6 +455,116 @@ function previewContent(drawing) {
   return `${outlines}<g>${drawing.labels}</g>`;
 }
 
+function updateBoxPreview(drawing) {
+  const revision = ++boxPreviewRevision;
+  const loading = document.querySelector('#box-loading');
+  const stage = document.querySelector('#box-canvas');
+  document.querySelector('#box-error').textContent = '';
+  document.querySelector('#box-dimensions').textContent = drawing.description;
+  document.querySelector('#box-material').textContent = `${savedMaterials.find(material => material.id === selectedMaterialId).name} · ${number(drawing.model.thickness)} mm`;
+  stage.setAttribute('aria-label', `Assembled 3D box. ${drawing.label}`);
+  loading.hidden = false;
+  stage.hidden = true;
+  if (!boxViewerPromise) {
+    boxViewerPromise = import('./preview3d.js?v=38').then(module => {
+      boxViewer = module.createBoxViewer(stage);
+      boxViewer.setVisible(mode === 'preview');
+      return boxViewer;
+    });
+  }
+  boxViewerPromise.then(viewer => {
+    if (mode !== 'preview' || revision !== boxPreviewRevision) return;
+    stage.hidden = false;
+    viewer.update(drawing);
+    syncEnvironmentLight();
+    viewer.setPaperEnabled(document.querySelector('#box-paper').checked);
+    viewer.setLampEnabled(document.querySelector('#box-lamp').checked);
+    loading.hidden = true;
+  }).catch(() => {
+    boxViewer = null;
+    boxViewerPromise = null;
+    if (mode !== 'preview' || revision !== boxPreviewRevision) return;
+    loading.hidden = true;
+    stage.hidden = true;
+    document.querySelector('#box-error').textContent = 'The 3D preview could not start. Enable WebGL in your browser and reopen Preview.';
+  });
+}
+document.querySelector('#box-reset').addEventListener('click', () => boxViewer?.reset());
+document.querySelector('#box-paper').addEventListener('change', event => boxViewer?.setPaperEnabled(event.target.checked));
+function syncEnvironmentLight() {
+  const input = document.querySelector('#box-environment');
+  const percent = numericValue(input);
+  document.querySelector('#box-environment-value').textContent = `${percent}%`;
+  input.setAttribute('aria-valuetext', `${percent}%`);
+  boxViewer?.setEnvironmentLight(percent);
+  syncPreviewTheme();
+}
+document.querySelector('#box-environment').addEventListener('input', syncEnvironmentLight);
+function syncPreviewTheme() {
+  const dark = mode === 'preview' && numericValue(document.querySelector('#box-environment')) < 15;
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+}
+function syncLampMode() {
+  const enabled = mode === 'preview' && document.querySelector('#box-lamp').checked;
+  boxViewer?.setLampEnabled(enabled);
+}
+let lampAudioContext = null;
+const lampClickBuffers = new Map();
+function switchClickSamples(sampleRate, enabled) {
+  const samples = new Float32Array(Math.ceil(sampleRate * 0.075));
+  const pitch = enabled ? 1 : 0.86;
+  for (let index = 0; index < samples.length; index++) {
+    const time = index / sampleRate;
+    const contactTime = time - 0.014;
+    // A sharp snap, a low housing knock, then the switch contact settling.
+    const snap = (Math.random() * 2 - 1) * 0.42 * Math.exp(-time / 0.0035);
+    const knock = Math.sin(2 * Math.PI * 185 * pitch * time) * 0.28 * Math.exp(-time / 0.010);
+    const spring = Math.sin(2 * Math.PI * 1450 * pitch * time) * 0.10 * Math.exp(-time / 0.005);
+    const contact = contactTime >= 0
+      ? (Math.random() * 2 - 1) * 0.30 * Math.exp(-contactTime / 0.003)
+        + Math.sin(2 * Math.PI * 520 * pitch * contactTime) * 0.16 * Math.exp(-contactTime / 0.007)
+      : 0;
+    const attack = Math.min(1, time / 0.0003);
+    samples[index] = (snap + knock + spring + contact) * attack;
+  }
+  return samples;
+}
+function playLampSwitchClick(enabled) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    lampAudioContext ||= new AudioContext();
+    const context = lampAudioContext;
+    const play = () => {
+      if (!lampClickBuffers.has(enabled)) {
+        const samples = switchClickSamples(context.sampleRate, enabled);
+        const buffer = context.createBuffer(1, samples.length, context.sampleRate);
+        buffer.copyToChannel(samples, 0);
+        lampClickBuffers.set(enabled, buffer);
+      }
+      const source = context.createBufferSource();
+      source.buffer = lampClickBuffers.get(enabled);
+      const filter = context.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 3600;
+      filter.Q.value = 0.7;
+      const volume = context.createGain();
+      volume.gain.value = 0.55;
+      source.connect(filter).connect(volume).connect(context.destination);
+      source.onended = () => { source.disconnect(); filter.disconnect(); volume.disconnect(); };
+      source.start();
+    };
+    if (context.state === 'suspended') context.resume().then(play).catch(() => {});
+    else if (context.state === 'running') play();
+  } catch {
+    // The lamp still works if audio is unavailable or blocked by the browser.
+  }
+}
+document.querySelector('#box-lamp').addEventListener('change', event => {
+  syncLampMode();
+  playLampSwitchClick(event.target.checked);
+});
+
 function updatePreview() {
   try {
     if (mode === 'material') {
@@ -462,6 +576,10 @@ function updatePreview() {
     }
     error.textContent = '';
     downloadButton.disabled = false;
+    if (mode === 'preview') {
+      updateBoxPreview(currentDrawing);
+      return;
+    }
     dimensions.textContent = currentDrawing.description;
     preview.setAttribute('aria-label', currentDrawing.label);
     document.querySelector('#download-hint').textContent = currentDrawing.hint;
@@ -472,6 +590,13 @@ function updatePreview() {
     preview.innerHTML = `<svg viewBox="0 0 ${currentDrawing.width} ${currentDrawing.height}" aria-hidden="true" fill="none" stroke="#000000" stroke-width="0.09">${previewContent(currentDrawing)}</svg>`;
   } catch (issue) {
     currentDrawing = null;
+    if (mode === 'preview') {
+      ++boxPreviewRevision;
+      document.querySelector('#box-canvas').hidden = true;
+      document.querySelector('#box-loading').hidden = true;
+      document.querySelector('#box-error').textContent = issue.message;
+      document.querySelector('#box-dimensions').textContent = 'Enter valid dimensions in Assembly';
+    }
     document.querySelector('#kumiko-cell-dimensions').textContent = '';
     document.querySelector('#assembly-joints').textContent = '';
     document.querySelector('#assembly-preview-note').textContent = '';
@@ -492,7 +617,7 @@ function updatePreview() {
 }
 
 function setMode(nextMode) {
-  if (!['material', 'kumiko', 'assembly'].includes(nextMode)) return;
+  if (!['material', 'kumiko', 'assembly', 'preview'].includes(nextMode)) return;
   mode = nextMode;
   try {
     localStorage.setItem('lamp-maker.active-tab', mode);
@@ -500,6 +625,11 @@ function setMode(nextMode) {
     // Tab switching remains available when local storage is unavailable.
   }
   document.body.dataset.mode = mode;
+  document.querySelector('.workspace').hidden = mode === 'preview';
+  document.querySelector('#box-preview').hidden = mode !== 'preview';
+  boxViewer?.setVisible(mode === 'preview');
+  syncPreviewTheme();
+  syncLampMode();
   document.querySelector('#material-settings').hidden = mode !== 'material';
   document.querySelector('#kerf-test-title').hidden = mode !== 'material';
   document.querySelector('#kerf-controls').hidden = mode !== 'material';
@@ -514,7 +644,8 @@ function setMode(nextMode) {
   const settings = {
     material: ['01', 'Material', 'Kerf test', '20 mm pieces. Compensation only on the mating edges.'],
     kumiko: ['02', 'Pattern', 'Pattern & panel', 'Repeating geometry. A continuous lattice inside a solid frame.'],
-    assembly: ['03', 'Assembly', 'Panels & joints', 'Four patterned walls with legs, a patterned top, and a tabbed bottom.']
+    assembly: ['03', 'Assembly', 'Panels & joints', 'Four patterned walls with legs, a patterned top, and a tabbed bottom.'],
+    preview: ['04', 'Preview', 'Assembled box', 'Drag to rotate the assembled box.']
   }[mode];
   const [index, title, controlsTitle, description] = settings;
   document.querySelector('#title').innerHTML = `${title}<span>${index}</span>`;
@@ -831,7 +962,7 @@ document.querySelector('#exaggerate-fingers').addEventListener('change', updateP
 let initialMode = 'material';
 try {
   const savedMode = localStorage.getItem('lamp-maker.active-tab');
-  if (['material', 'kumiko', 'assembly'].includes(savedMode)) initialMode = savedMode;
+  if (['material', 'kumiko', 'assembly', 'preview'].includes(savedMode)) initialMode = savedMode;
 } catch {
   // Use the default tab when local storage is unavailable.
 }
