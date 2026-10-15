@@ -130,6 +130,24 @@ for (const [pattern, name, vertexCounts] of [
   });
 }
 
+test('Kakuasa square cells keep the traditional 22.5 degree leaf branches', () => {
+  const { context } = generators('kakuasa');
+  for (const cellCount of [2, 3, 5]) {
+    const drawing = context.kumikoDrawing({ panelWidth: 150, panelHeight: 150, cellCount, strut: 1 });
+    const angles = drawing.openingPolygons.flatMap(points => points.map((p, i) => {
+      const q = points[(i + 1) % points.length];
+      return (Math.atan2(q[1] - p[1], q[0] - p[0]) * 180 / Math.PI + 180) % 180;
+    }));
+    for (const angle of angles) {
+      assert.ok(Math.abs(angle / 22.5 - Math.round(angle / 22.5)) < 1e-8,
+        `Unexpected Kakuasa edge angle: ${angle}`);
+    }
+    for (const branch of [22.5, 67.5, 112.5, 157.5]) {
+      assert.ok(angles.some(angle => Math.abs(angle - branch) < 1e-8), `Missing ${branch} degree branches`);
+    }
+  }
+});
+
 test('Senbon keeps equally spaced slots at full height as dimensions and density change', () => {
   const { context, set } = generators('senbon');
   for (const [width, height, count] of [[150, 243, 5], [243, 150, 8], [150, 1000, 100], [150, 243, 1]]) {

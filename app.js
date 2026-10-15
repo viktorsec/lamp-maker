@@ -398,7 +398,14 @@ function kumikoDrawing(options = {}) {
       return;
     }
     if (!asanoha && !tsumiishiKikko && !kakuasa) return addOpening(triangle);
-    const center = [0, 1].map(axis => triangle.reduce((sum, p) => sum + p[axis], 0) / 3);
+    // Kakuasa's leaves bisect the triangle's angles. Its incenter gives
+    // 22.5° branches in a square cell; the centroid skews them to 26.565°.
+    const weights = triangle.map((_, i) => kakuasa
+      ? Math.hypot(triangle[(i + 1) % 3][0] - triangle[(i + 2) % 3][0],
+        triangle[(i + 1) % 3][1] - triangle[(i + 2) % 3][1])
+      : 1);
+    const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
+    const center = [0, 1].map(axis => triangle.reduce((sum, p, i) => sum + p[axis] * weights[i], 0) / weightSum);
     triangle.forEach((p, i) => {
       if (tsumiishiKikko) {
         // Center-to-midpoint spokes make three kites per triangle. Across
