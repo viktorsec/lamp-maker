@@ -89,6 +89,11 @@
             <h3 id="box-pattern-name"></h3>
             <p id="box-pattern-description"></p>
           </section>
+          <dl aria-label="Dimensions" aria-live="polite">
+            <div><dt>Width</dt><dd id="box-total-width">—</dd></div>
+            <div><dt>Depth</dt><dd id="box-total-depth">—</dd></div>
+            <div><dt>Height</dt><dd id="box-total-height">—</dd></div>
+          </dl>
           <button id="box-reset" class="secondary-button" type="button">Reset view</button>
         </aside>
       </section>
@@ -155,49 +160,39 @@
             <div class="tab-material">
               <label for="assembly-material">Select material</label>
               <select id="assembly-material" class="material-select"></select>
-              <p id="assembly-material-summary" class="hint"></p>
             </div>
-            <div id="assembly-dimensions" class="dimension-pair" data-linked="true">
-              <div class="dimension-fields">
-                <label for="assembly-width">Panel width</label>
-                <div class="input-wrap"><input id="assembly-width" type="number" min="10" max="1000" step="any" value="150" aria-describedby="size-error" /><span>mm</span></div>
-                <label for="assembly-height">Panel height</label>
-                <div class="input-wrap"><input id="assembly-height" type="number" min="10" max="1000" step="any" value="243" aria-describedby="assembly-height-help size-error" /><span>mm</span></div>
-              </div>
-              <div class="dimension-link">
-                <button id="assembly-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="true" title="Unlink dimensions">φ</button>
-              </div>
-            </div>
-            <p id="assembly-height-help" class="hint">Panel dimensions and pattern are shared with Pattern. Height excludes the legs; total height is panel height + leg height.</p>
-            <label for="assembly-thickness">Material thickness</label>
-            <div class="input-wrap"><input id="assembly-thickness" type="number" readonly min="0.5" max="50" step="any" value="3" aria-describedby="size-error" /><span>mm</span></div>
-            <label for="assembly-kerf">Cut kerf</label>
-            <div class="input-wrap"><input id="assembly-kerf" type="number" readonly min="0" max="1" step="any" value="0.1" aria-describedby="size-error" /><span>mm</span></div>
+            <input id="assembly-width" type="hidden" value="150" />
+            <input id="assembly-height" type="hidden" value="243" />
+            <input id="assembly-thickness" type="hidden" value="3" />
+            <input id="assembly-kerf" type="hidden" value="0.1" />
+            <dl aria-label="Dimensions" aria-live="polite">
+              <div><dt>Width</dt><dd id="assembly-total-width">—</dd></div>
+              <div><dt>Depth</dt><dd id="assembly-total-depth">—</dd></div>
+              <div><dt>Height</dt><dd id="assembly-total-height">—</dd></div>
+            </dl>
             <label for="assembly-fingers">Fingers per front / back edge</label>
             <div class="input-wrap"><input id="assembly-fingers" type="number" min="2" max="50" step="1" value="5" aria-describedby="size-error" /><span>fingers</span></div>
-            <p id="assembly-joints" class="hint" aria-live="polite"></p>
             <fieldset id="assembly-bottom-controls" class="bottom-controls">
               <legend>Bottom panel</legend>
-              <label for="assembly-bottom-offset">Bottom clearance</label>
-              <div class="input-wrap"><input id="assembly-bottom-offset" type="number" min="0.5" max="1000" step="any" value="10" aria-describedby="assembly-bottom-help size-error" /><span>mm</span></div>
-              <label id="assembly-bottom-tabs-label">Bottom tabs per edge</label>
+              <label for="assembly-bottom-offset">Clearance under fingers</label>
+              <div class="input-wrap"><input id="assembly-bottom-offset" type="number" min="0.5" max="1000" step="any" value="5" aria-describedby="size-error" /><span>mm</span></div>
+              <label for="assembly-bottom-over">Clearance over fingers</label>
+              <div class="input-wrap"><input id="assembly-bottom-over" type="number" min="0.5" max="1000" step="any" value="5" aria-describedby="size-error" /><span>mm</span></div>
+              <label id="assembly-bottom-fingers-label">Bottom fingers per edge</label>
               <input id="assembly-bottom-fingers" type="hidden" value="2" />
-              <div class="segmented-control" role="group" aria-labelledby="assembly-bottom-tabs-label" aria-describedby="assembly-bottom-help">
-                <button type="button" data-bottom-tabs="2" aria-pressed="true">2</button>
-                <button type="button" data-bottom-tabs="4" aria-pressed="false">4</button>
+              <div class="segmented-control" role="group" aria-labelledby="assembly-bottom-fingers-label">
+                <button type="button" data-bottom-fingers="2" aria-pressed="true">2</button>
+                <button type="button" data-bottom-fingers="4" aria-pressed="false">4</button>
               </div>
               <label for="assembly-bottom-cord-diameter">Cord diameter</label>
-              <div class="input-wrap"><input id="assembly-bottom-cord-diameter" type="number" min="1" max="100" step="any" value="8" aria-describedby="assembly-cord-help size-error" /><span>mm</span></div>
-              <p id="assembly-cord-help" class="hint">Rounded cord notch at the center of one bottom edge. Width matches the cord diameter; kerf compensation is included.</p>
-              <p id="assembly-bottom-help" class="hint">Clearance is measured from the top of the legs to the underside of the bottom panel. Tabs fit closed wall slots; kerf compensation is included.</p>
+              <div class="input-wrap"><input id="assembly-bottom-cord-diameter" type="number" min="1" max="100" step="any" value="8" aria-describedby="size-error" /><span>mm</span></div>
             </fieldset>
             <fieldset id="assembly-leg-controls" class="bottom-controls">
               <legend>Legs</legend>
               <label for="assembly-leg-height">Leg height</label>
-              <div class="input-wrap"><input id="assembly-leg-height" type="number" min="0.5" max="100" step="any" value="10" aria-describedby="assembly-leg-help size-error" /><span>mm</span></div>
+              <div class="input-wrap"><input id="assembly-leg-height" type="number" min="0.5" max="100" step="any" value="10" aria-describedby="size-error" /><span>mm</span></div>
               <label for="assembly-leg-width">Leg width</label>
-              <div class="input-wrap"><input id="assembly-leg-width" type="number" min="1" max="100" step="any" value="15" aria-describedby="assembly-leg-help size-error" /><span>mm</span></div>
-              <p id="assembly-leg-help" class="hint">Two legs per wall, extending below the panel height.</p>
+              <div class="input-wrap"><input id="assembly-leg-width" type="number" min="1" max="100" step="any" value="15" aria-describedby="size-error" /><span>mm</span></div>
             </fieldset>
           </div>
           <p id="size-error" class="error" role="status"></p>

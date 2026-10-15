@@ -202,12 +202,63 @@ test('bottom cord notch defaults to 8 mm and stays centered with kerf compensati
   }
 });
 
-test('cord diameter rejects invalid values and collisions with bottom tabs', () => {
+test('cord diameter rejects invalid values and collisions with bottom fingers', () => {
   const { context, set } = generators();
   for (const value of ['', 0, -1, 101, 'NaN']) {
     set('assembly-bottom-cord-diameter', value);
     assert.throws(() => context.assemblyDrawing(), /cord diameter/i);
   }
   set('assembly-bottom-cord-diameter', 30);
-  assert.throws(() => context.assemblyDrawing(), /fewer bottom tabs/);
+  assert.throws(() => context.assemblyDrawing(), /fewer bottom fingers/);
+});
+
+
+test('assembly shares the bottom frame with finger clearance when calculating total height', () => {
+  const { context, set } = generators();
+  for (const [under, over, legs] of [[10, 10, 10], [18, 7, 15], [5, 25, 8]]) {
+    set('assembly-bottom-offset', under);
+    set('assembly-bottom-over', over);
+    set('assembly-leg-height', legs);
+    const drawing = context.assemblyDrawing();
+    const { model } = drawing;
+    assert.equal(model.bodyHeight, model.panelHeight - model.frameWidth + over + model.thickness + under);
+    assert.equal(model.totalHeight, model.bodyHeight + legs);
+    const front = drawing.panels.find(panel => panel.name === 'Front');
+    assert.equal(front.windows[0].points[0][1], model.panelHeight - model.frameWidth + over);
+    assert.equal(front.windows[0].points[2][1], model.panelHeight - model.frameWidth + over + model.thickness);
+    assert.equal(Math.max(...front.points.map(point => point[1])), model.totalHeight);
+    assert.ok(front.openings.every(opening => opening.points.every(point => point[1] <= model.panelHeight - 8)));
+    const paperMaterial = new THREE.MeshBasicMaterial();
+    const box = buildBoxModel(drawing, [paperMaterial, paperMaterial], paperMaterial);
+    box.children.find(panel => panel.name === 'Front').children[0].geometry.computeBoundingBox();
+    const paperBounds = box.children.find(panel => panel.name === 'Front').children[0].geometry.boundingBox;
+    assert.equal(paperBounds.min.y, -(model.panelHeight - model.frameWidth + over));
+    box.traverse(object => object.geometry?.dispose());
+    paperMaterial.dispose();
+  }
+});
+
+test('assembly rejects missing or invalid finger clearances', () => {
+  for (const id of ['assembly-bottom-offset', 'assembly-bottom-over']) {
+    const { context, set } = generators();
+    for (const value of ['', 0, -5, 1001]) {
+      set(id, value);
+      assert.throws(() => context.assemblyDrawing(), /clearance/i);
+    }
+  }
+});
+
+
+test('frame width does not add an extra gap above bottom fingers', () => {
+  const { context, set } = generators('senbon');
+  for (const frame of [4, 8, 12]) {
+    set('kumiko-frame', frame);
+    set('assembly-bottom-over', 10);
+    set('assembly-bottom-offset', 10);
+    const drawing = context.assemblyDrawing();
+    const wall = drawing.panels.find(panel => panel.name === 'Front');
+    const patternBottom = Math.max(...wall.openings.flatMap(opening => opening.points.map(point => point[1])));
+    assert.equal(wall.windows[0].points[0][1] - patternBottom, 10);
+    assert.equal(drawing.model.totalHeight, 243 - frame + 10 + 3 + 10 + 10);
+  }
 });
