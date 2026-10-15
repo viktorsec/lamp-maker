@@ -6,9 +6,9 @@
     <meta name="theme-color" content="#eee9d8" />
     <title>Lamp Maker — Cut files</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="styles.css?v=13" />
+    <link rel="stylesheet" href="styles.css?v=28" />
     <script src="pattern-picker.js?v=2" defer></script>
-    <script src="app.js?v=79" defer></script>
+    <script src="app.js?v=87" defer></script>
   </head>
   <body>
     <main>
@@ -39,19 +39,19 @@
           </div>
           <div>
             <label for="material-thickness">Thickness</label>
-            <div class="input-wrap"><input id="material-thickness" type="number" min="0.5" max="50" step="any" aria-describedby="material-error" /><span>mm</span></div>
+            <div class="input-wrap pattern-stepper"><input id="material-thickness" type="number" min="0.5" max="50" step="any" aria-describedby="material-error" /><span>mm</span><button type="button" data-material-step="material-thickness" data-direction="-1" aria-label="Decrease material thickness">−</button><button type="button" data-material-step="material-thickness" data-direction="1" aria-label="Increase material thickness">+</button></div>
           </div>
           <div>
             <label for="material-speed">Cutting speed</label>
-            <div class="input-wrap"><input id="material-speed" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="material-error" /><span>%</span></div>
+            <div class="input-wrap pattern-stepper"><input id="material-speed" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="material-error" /><span>%</span><button type="button" data-material-step="material-speed" data-direction="-1" aria-label="Decrease cutting speed">−</button><button type="button" data-material-step="material-speed" data-direction="1" aria-label="Increase cutting speed">+</button></div>
           </div>
           <div>
             <label for="material-power">Cutting power</label>
-            <div class="input-wrap"><input id="material-power" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="material-error" /><span>%</span></div>
+            <div class="input-wrap pattern-stepper"><input id="material-power" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="material-error" /><span>%</span><button type="button" data-material-step="material-power" data-direction="-1" aria-label="Decrease cutting power">−</button><button type="button" data-material-step="material-power" data-direction="1" aria-label="Increase cutting power">+</button></div>
           </div>
           <div>
             <label for="material-kerf">Kerf</label>
-            <div class="input-wrap"><input id="material-kerf" type="number" min="0" max="1" step="any" aria-describedby="material-error" /><span>mm</span></div>
+            <div class="input-wrap pattern-stepper"><input id="material-kerf" type="number" min="0" max="1" step="any" aria-describedby="material-error" /><span>mm</span><button type="button" data-material-step="material-kerf" data-direction="-1" aria-label="Decrease material kerf">−</button><button type="button" data-material-step="material-kerf" data-direction="1" aria-label="Increase material kerf">+</button></div>
           </div>
         </div>
         <p class="hint">The selected material supplies thickness and kerf to Assembly. Record your cutter’s speed and power here, then use the test below to find a snug fit.</p>
@@ -76,7 +76,6 @@
         <aside class="controls box-controls" aria-label="Preview options">
           <h2>View &amp; lighting</h2>
           <p class="description">Inspect the assembled box with paper lining and a warm light inside.</p>
-          <p id="box-material" class="hint"></p>
           <div class="box-toggles">
             <label class="offset-toggle"><input id="box-paper" type="checkbox" checked />Paper lining</label>
             <label class="offset-toggle"><input id="box-lamp" type="checkbox" />Lamp on</label>
@@ -87,30 +86,32 @@
           </div>
           <section class="box-pattern-details" aria-labelledby="box-pattern-name">
             <h3 id="box-pattern-name"></h3>
-            <p id="box-pattern-description"></p>
+            <p id="box-pattern-summary" hidden></p>
+            <div id="box-pattern-description"></div>
           </section>
-          <dl aria-label="Dimensions" aria-live="polite">
-            <div><dt>Width</dt><dd id="box-total-width">—</dd></div>
-            <div><dt>Depth</dt><dd id="box-total-depth">—</dd></div>
-            <div><dt>Height</dt><dd id="box-total-height">—</dd></div>
-          </dl>
+          <fieldset id="box-size-details" class="bottom-controls">
+            <legend>Dimensions</legend>
+            <dl aria-label="Dimensions" aria-live="polite">
+              <div><dt>Width</dt><dd id="box-total-width">—</dd></div>
+              <div><dt>Depth</dt><dd id="box-total-depth">—</dd></div>
+              <div><dt>Height</dt><dd id="box-total-height">—</dd></div>
+            </dl>
+            <p id="box-material" class="hint"></p>
+          </fieldset>
           <button id="box-reset" class="secondary-button" type="button">Reset view</button>
         </aside>
       </section>
       <section class="workspace" aria-label="Cut file generator">
         <div class="controls">
           <h2 id="controls-title">Pattern &amp; panel</h2>
-          <p class="description" id="description">Repeating geometry. A continuous lattice inside a solid frame.</p>
+          <p class="description" id="description" hidden></p>
           <div id="kerf-controls" hidden>
             <label for="kerf-min">First kerf</label>
-            <div class="input-wrap"><input id="kerf-min" type="number" min="-1" max="1" step="0.001" value="0" aria-describedby="kerf-help size-error" /><span>mm</span></div>
+            <div class="input-wrap pattern-stepper"><input id="kerf-min" type="number" min="-1" max="1" step="0.05" value="0" aria-describedby="size-error" /><span>mm</span><button type="button" data-material-step="kerf-min" data-direction="-1" aria-label="Decrease first kerf">−</button><button type="button" data-material-step="kerf-min" data-direction="1" aria-label="Increase first kerf">+</button></div>
             <label for="kerf-max">Last kerf</label>
-            <div class="input-wrap"><input id="kerf-max" type="number" min="-1" max="1" step="0.001" value="0.30" aria-describedby="kerf-help size-error" /><span>mm</span></div>
+            <div class="input-wrap pattern-stepper"><input id="kerf-max" type="number" min="-1" max="1" step="0.05" value="0.30" aria-describedby="size-error" /><span>mm</span><button type="button" data-material-step="kerf-max" data-direction="-1" aria-label="Decrease last kerf">−</button><button type="button" data-material-step="kerf-max" data-direction="1" aria-label="Increase last kerf">+</button></div>
             <label for="kerf-step">Increment</label>
-            <div class="input-wrap"><input id="kerf-step" type="number" min="0.001" max="1" step="0.001" value="0.05" aria-describedby="kerf-help size-error" /><span>mm</span></div>
-            <p id="kerf-help" class="hint">Kerf compensation, −1 to 1 mm. Negative values loosen the fit; positive values tighten it. Up to 15 pairs. The last value is included only if the increment reaches it.</p>
-            <p class="hint">Only the tab, notch, and mating shoulders are adjusted. Fit each matching pair flat, edge to edge. Choose the snug fit. Compensation is already applied; set extra kerf offset to zero.</p>
-            <p class="hint">Set the SVG’s “engrave-labels” group to a light line engraving before cutting the “cut-outlines” group. Labels use red hairlines (RGB 255, 0, 0); cut outlines use black hairlines.</p>
+            <div class="input-wrap pattern-stepper"><input id="kerf-step" type="number" min="0.001" max="1" step="any" value="0.05" aria-describedby="size-error" /><span>mm</span><button type="button" data-material-step="kerf-step" data-direction="-1" aria-label="Decrease increment">−</button><button type="button" data-material-step="kerf-step" data-direction="1" aria-label="Increase increment">+</button></div>
           </div>
           <div id="kumiko-controls">
             <label for="kumiko-pattern">Pattern</label>
@@ -131,7 +132,7 @@
             </select>
             <p id="kumiko-pattern-description" class="hint" aria-live="polite"></p>
             <fieldset class="bottom-controls">
-              <legend>Experimental</legend>
+              <legend>Combined patterns</legend>
               <label class="offset-toggle"><input id="kumiko-combine" type="checkbox" />Combine patterns</label>
               <div id="kumiko-combine-controls" hidden>
                 <label for="kumiko-combination-layout">Composition</label>
@@ -140,89 +141,115 @@
                   <option value="islands">Hexagonal islands</option>
                   <option value="interlock">River</option>
                 </select>
+                <p id="kumiko-combine-help" class="hint">Both bands use whole repeats and share cell size, frame, and divider. Band position selects a whole-repeat boundary. The top panel uses only the top pattern.</p>
                 <label for="kumiko-second-pattern">Bottom pattern</label>
                 <select id="kumiko-second-pattern" class="material-select" aria-describedby="kumiko-combine-help"></select>
                 <div id="kumiko-band-share">
                 <label for="kumiko-split">Band position</label>
-                <div class="input-wrap"><input id="kumiko-split" type="number" min="1" max="7" step="1" value="4" aria-describedby="kumiko-combine-help size-error" /></div>
+                <div class="band-position-slider">
+                  <input id="kumiko-split" type="range" min="1" max="7" step="1" value="4" aria-describedby="size-error" />
+                  <div class="band-position-marks"><span id="kumiko-band-golden" aria-hidden="true">φ</span></div>
                 </div>
-                <p id="kumiko-combine-help" class="hint">The main pattern fills the top band. Both bands share cell count, lattice width, and frame. A solid divider matching the lattice width joins them. Walls use both patterns; the top panel uses only the top pattern.</p>
+                </div>
               </div>
             </fieldset>
-            <input id="kumiko-width" type="hidden" value="150" />
-            <input id="kumiko-height" type="hidden" value="231.6" />
-            <label for="kumiko-pitch">Cell size</label>
-            <div class="input-wrap"><input id="kumiko-pitch" type="number" min="1" max="500" step="0.1" value="27.2" aria-describedby="size-error" /><span>mm</span></div>
-            <div id="kumiko-dimensions" class="dimension-pair" data-linked="true">
-              <div class="dimension-fields">
-                <label for="kumiko-cell-count">Cells across width</label>
-                <div class="input-wrap pattern-stepper">
-                  <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions size-error" />
-                  <span>cells</span>
-                  <button id="kumiko-decrease" type="button" aria-label="Decrease pattern cell count" title="One fewer pattern cell">−</button>
-                  <button id="kumiko-increase" type="button" aria-label="Increase pattern cell count" title="One more pattern cell">+</button>
+            <fieldset class="bottom-controls">
+              <legend>Dimensions</legend>
+              <input id="kumiko-width" type="hidden" value="150" />
+              <input id="kumiko-height" type="hidden" value="231.6" />
+              <div class="label-with-info">
+                <label for="kumiko-pitch">Cell size</label>
+                <span class="field-info">
+                  <button class="info-button" type="button" aria-label="About cell size" aria-expanded="false" aria-controls="kumiko-pitch-help" aria-describedby="kumiko-pitch-help"><span aria-hidden="true">i</span></button>
+                  <span id="kumiko-pitch-help" class="info-tooltip" role="tooltip" hidden>Horizontal repeat size. Cells keep their exact proportions; panel dimensions follow the grid.</span>
+                </span>
+              </div>
+              <div class="input-wrap pattern-stepper"><input id="kumiko-pitch" type="number" min="1" max="500" step="0.1" value="27.2" aria-describedby="kumiko-pitch-help size-error" /><span>mm</span><button id="kumiko-pitch-decrease" type="button" aria-label="Decrease cell size">−</button><button id="kumiko-pitch-increase" type="button" aria-label="Increase cell size">+</button></div>
+              <div id="kumiko-dimensions" class="dimension-pair" data-linked="true">
+                <div class="dimension-fields">
+                  <label for="kumiko-cell-count">Lattice columns</label>
+                  <div class="input-wrap pattern-stepper">
+                    <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="size-error" />
+                    <span>cells</span>
+                    <button id="kumiko-decrease" type="button" aria-label="Decrease pattern cell count" title="One fewer pattern cell">−</button>
+                    <button id="kumiko-increase" type="button" aria-label="Increase pattern cell count" title="One more pattern cell">+</button>
+                  </div>
+                  <label for="kumiko-rows">Lattice rows</label>
+                  <div class="input-wrap pattern-stepper">
+                    <input id="kumiko-rows" type="number" min="2" max="200" step="2" value="16" aria-describedby="size-error" />
+                    <span>cells</span>
+                    <button id="kumiko-rows-decrease" type="button" aria-label="Decrease row count" title="One fewer row repeat">−</button>
+                    <button id="kumiko-rows-increase" type="button" aria-label="Increase row count" title="One more row repeat">+</button>
+                  </div>
                 </div>
-                <label for="kumiko-rows">Rows high</label>
-                <div class="input-wrap pattern-stepper">
-                  <input id="kumiko-rows" type="number" min="2" max="200" step="2" value="16" aria-describedby="size-error" />
-                  <button id="kumiko-rows-decrease" type="button" aria-label="Decrease row count" title="One fewer row repeat">−</button>
-                  <button id="kumiko-rows-increase" type="button" aria-label="Increase row count" title="One more row repeat">+</button>
+                <div class="dimension-link">
+                    <button id="kumiko-golden-ratio" class="ratio-button" type="button" aria-label="Choose rows nearest the golden ratio" aria-pressed="true" title="Stop choosing rows near the golden ratio"><span aria-hidden="true">φ</span></button>
                 </div>
               </div>
-              <div class="dimension-link">
-                <button id="kumiko-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="true" title="Unlink dimensions">φ</button>
+              <label for="kumiko-frame">Frame width</label>
+              <div class="input-wrap pattern-stepper"><input id="kumiko-frame" type="number" min="1" max="100" step="1" value="8" aria-describedby="size-error" /><span>mm</span><button id="kumiko-frame-decrease" type="button" aria-label="Decrease frame width">−</button><button id="kumiko-frame-increase" type="button" aria-label="Increase frame width">+</button></div>
+              <p id="kumiko-panel-size" class="hint" aria-live="polite"></p>
+            </fieldset>
+            <fieldset class="bottom-controls">
+              <legend>Bar thickness</legend>
+              <label for="kumiko-strut">Lattice thickness</label>
+              <div class="input-wrap pattern-stepper"><input id="kumiko-strut" type="number" min="0.5" max="20" step="0.5" value="2" aria-describedby="size-error" /><span>mm</span><button id="kumiko-strut-decrease" type="button" aria-label="Decrease lattice thickness">−</button><button id="kumiko-strut-increase" type="button" aria-label="Increase lattice thickness">+</button></div>
+              <div id="kumiko-infill-controls" hidden>
+                <div class="label-with-info">
+                  <label for="kumiko-infill-strut">Infill lattice thickness</label>
+                  <span class="field-info">
+                    <button class="info-button" type="button" aria-label="About infill lattice thickness" aria-expanded="false" aria-controls="kumiko-infill-tip" aria-describedby="kumiko-infill-tip"><span aria-hidden="true">i</span></button>
+                    <span id="kumiko-infill-tip" class="info-tooltip" role="tooltip" hidden>Width of the smaller strips inside the main lattice.</span>
+                  </span>
+                </div>
+                <div class="input-wrap pattern-stepper"><input id="kumiko-infill-strut" type="number" min="0.5" max="20" step="0.5" value="1.5" aria-describedby="kumiko-infill-help size-error" /><span>mm</span><button id="kumiko-infill-strut-decrease" type="button" aria-label="Decrease infill lattice thickness">−</button><button id="kumiko-infill-strut-increase" type="button" aria-label="Increase infill lattice thickness">+</button></div>
+                <p id="kumiko-infill-help" class="hint">Recommended at 50–75% of the lattice width.</p>
               </div>
-            </div>
-            <p class="hint">Panel dimensions and pattern are shared with Assembly.</p>
-            <p id="kumiko-cell-dimensions" class="hint" aria-live="polite"></p>
-            <label for="kumiko-strut">Lattice width</label>
-            <div class="input-wrap"><input id="kumiko-strut" type="number" min="0.5" max="20" step="any" value="2" aria-describedby="size-error" /><span>mm</span></div>
-            <div id="kumiko-infill-controls" hidden>
-              <label for="kumiko-infill-strut">Infill lattice width</label>
-              <div class="input-wrap"><input id="kumiko-infill-strut" type="number" min="0.5" max="20" step="any" value="1.5" aria-describedby="kumiko-infill-help size-error" /><span>mm</span></div>
-              <p id="kumiko-infill-help" class="hint">Width of the smaller strips inside the main lattice. Recommended at 50–75% of the lattice width.</p>
-            </div>
-            <label for="kumiko-frame">Frame width</label>
-            <div class="input-wrap"><input id="kumiko-frame" type="number" min="1" max="100" step="any" value="8" aria-describedby="size-error" /><span>mm</span></div>
-            <p class="hint">Measured from the panel edge to the cutouts. Boundary spokes are included in this width.</p>
+            </fieldset>
           </div>
           <div id="assembly-controls" hidden>
-            <div class="tab-material">
-              <label for="assembly-material">Select material</label>
-              <select id="assembly-material" class="material-select"></select>
-            </div>
             <input id="assembly-width" type="hidden" value="150" />
             <input id="assembly-height" type="hidden" value="231.6" />
             <input id="assembly-thickness" type="hidden" value="3" />
             <input id="assembly-kerf" type="hidden" value="0.1" />
-            <dl aria-label="Dimensions" aria-live="polite">
-              <div><dt>Width</dt><dd id="assembly-total-width">—</dd></div>
-              <div><dt>Depth</dt><dd id="assembly-total-depth">—</dd></div>
-              <div><dt>Height</dt><dd id="assembly-total-height">—</dd></div>
-            </dl>
-            <label for="assembly-fingers">Fingers per front / back edge</label>
-            <div class="input-wrap"><input id="assembly-fingers" type="number" min="2" max="50" step="1" value="5" aria-describedby="size-error" /><span>fingers</span></div>
+            <div class="label-with-info">
+              <label for="assembly-fingers">Fingers per front / back edge</label>
+              <span class="field-info">
+                <button id="assembly-fingers-info" class="info-button" type="button" aria-label="About side panel fingers" aria-expanded="false" aria-controls="assembly-fingers-tip" aria-describedby="assembly-fingers-tip"><span aria-hidden="true">i</span></button>
+                <span id="assembly-fingers-tip" class="info-tooltip" role="tooltip" hidden>Side panels have one fewer finger per edge.</span>
+              </span>
+            </div>
+            <div class="input-wrap pattern-stepper"><input id="assembly-fingers" type="number" min="2" max="50" step="1" value="5" aria-describedby="assembly-fingers-tip size-error" /><button type="button" data-assembly-step="assembly-fingers" data-direction="-1" aria-label="Decrease fingers per front / back edge">−</button><button type="button" data-assembly-step="assembly-fingers" data-direction="1" aria-label="Increase fingers per front / back edge">+</button></div>
             <fieldset id="assembly-bottom-controls" class="bottom-controls">
               <legend>Bottom panel</legend>
-              <label for="assembly-bottom-offset">Clearance under fingers</label>
-              <div class="input-wrap"><input id="assembly-bottom-offset" type="number" min="0.5" max="1000" step="any" value="5" aria-describedby="size-error" /><span>mm</span></div>
-              <label for="assembly-bottom-over">Clearance over fingers</label>
-              <div class="input-wrap"><input id="assembly-bottom-over" type="number" min="0.5" max="1000" step="any" value="5" aria-describedby="size-error" /><span>mm</span></div>
               <label id="assembly-bottom-fingers-label">Bottom fingers per edge</label>
               <input id="assembly-bottom-fingers" type="hidden" value="2" />
               <div class="segmented-control" role="group" aria-labelledby="assembly-bottom-fingers-label">
                 <button type="button" data-bottom-fingers="2" aria-pressed="true">2</button>
                 <button type="button" data-bottom-fingers="4" aria-pressed="false">4</button>
               </div>
+              <label for="assembly-bottom-over">Clearance above fingers</label>
+              <div class="input-wrap pattern-stepper"><input id="assembly-bottom-over" type="number" min="1" max="1000" step="any" value="5" aria-describedby="size-error" /><span>mm</span><button type="button" data-assembly-step="assembly-bottom-over" data-direction="-1" aria-label="Decrease clearance above fingers">−</button><button type="button" data-assembly-step="assembly-bottom-over" data-direction="1" aria-label="Increase clearance above fingers">+</button></div>
+              <label for="assembly-bottom-offset">Clearance under fingers</label>
+              <div class="input-wrap pattern-stepper"><input id="assembly-bottom-offset" type="number" min="1" max="1000" step="any" value="5" aria-describedby="size-error" /><span>mm</span><button type="button" data-assembly-step="assembly-bottom-offset" data-direction="-1" aria-label="Decrease clearance under fingers">−</button><button type="button" data-assembly-step="assembly-bottom-offset" data-direction="1" aria-label="Increase clearance under fingers">+</button></div>
               <label for="assembly-bottom-cord-diameter">Cord diameter</label>
-              <div class="input-wrap"><input id="assembly-bottom-cord-diameter" type="number" min="1" max="100" step="any" value="8" aria-describedby="size-error" /><span>mm</span></div>
+              <div class="input-wrap pattern-stepper"><input id="assembly-bottom-cord-diameter" type="number" min="1" max="100" step="any" value="8" aria-describedby="size-error" /><span>mm</span><button type="button" data-assembly-step="assembly-bottom-cord-diameter" data-direction="-1" aria-label="Decrease cord diameter">−</button><button type="button" data-assembly-step="assembly-bottom-cord-diameter" data-direction="1" aria-label="Increase cord diameter">+</button></div>
             </fieldset>
             <fieldset id="assembly-leg-controls" class="bottom-controls">
               <legend>Legs</legend>
               <label for="assembly-leg-height">Leg height</label>
-              <div class="input-wrap"><input id="assembly-leg-height" type="number" min="0.5" max="100" step="any" value="10" aria-describedby="size-error" /><span>mm</span></div>
+              <div class="input-wrap pattern-stepper"><input id="assembly-leg-height" type="number" min="0" max="100" step="any" value="10" aria-describedby="size-error" /><span>mm</span><button type="button" data-assembly-step="assembly-leg-height" data-direction="-1" aria-label="Decrease leg height">−</button><button type="button" data-assembly-step="assembly-leg-height" data-direction="1" aria-label="Increase leg height">+</button></div>
               <label for="assembly-leg-width">Leg width</label>
-              <div class="input-wrap"><input id="assembly-leg-width" type="number" min="1" max="100" step="any" value="15" aria-describedby="size-error" /><span>mm</span></div>
+              <div class="input-wrap pattern-stepper"><input id="assembly-leg-width" type="number" min="1" max="100" step="any" value="15" aria-describedby="size-error" /><span>mm</span><button type="button" data-assembly-step="assembly-leg-width" data-direction="-1" aria-label="Decrease leg width">−</button><button type="button" data-assembly-step="assembly-leg-width" data-direction="1" aria-label="Increase leg width">+</button></div>
+            </fieldset>
+            <fieldset id="assembly-dimensions" class="bottom-controls">
+              <legend>Dimensions</legend>
+              <dl aria-label="Dimensions" aria-live="polite">
+                <div><dt>Width</dt><dd id="assembly-total-width">—</dd></div>
+                <div><dt>Depth</dt><dd id="assembly-total-depth">—</dd></div>
+                <div><dt>Height</dt><dd id="assembly-total-height">—</dd></div>
+              </dl>
+              <p id="assembly-material" class="hint" aria-live="polite"></p>
             </fieldset>
           </div>
           <p id="size-error" class="error" role="status"></p>
@@ -261,19 +288,19 @@
           </div>
           <div>
             <label for="edit-material-thickness">Thickness</label>
-            <div class="input-wrap"><input id="edit-material-thickness" type="number" required min="0.5" max="50" step="any" value="3" aria-describedby="edit-material-error" /><span>mm</span></div>
+            <div class="input-wrap pattern-stepper"><input id="edit-material-thickness" type="number" required min="0.5" max="50" step="any" value="3" aria-describedby="edit-material-error" /><span>mm</span><button type="button" data-material-step="edit-material-thickness" data-direction="-1" aria-label="Decrease material thickness">−</button><button type="button" data-material-step="edit-material-thickness" data-direction="1" aria-label="Increase material thickness">+</button></div>
           </div>
           <div>
             <label for="edit-material-speed">Cutting speed</label>
-            <div class="input-wrap"><input id="edit-material-speed" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="edit-material-error" /><span>%</span></div>
+            <div class="input-wrap pattern-stepper"><input id="edit-material-speed" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="edit-material-error" /><span>%</span><button type="button" data-material-step="edit-material-speed" data-direction="-1" aria-label="Decrease cutting speed">−</button><button type="button" data-material-step="edit-material-speed" data-direction="1" aria-label="Increase cutting speed">+</button></div>
           </div>
           <div>
             <label for="edit-material-power">Cutting power</label>
-            <div class="input-wrap"><input id="edit-material-power" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="edit-material-error" /><span>%</span></div>
+            <div class="input-wrap pattern-stepper"><input id="edit-material-power" type="number" min="0" max="100" step="any" placeholder="—" aria-describedby="edit-material-error" /><span>%</span><button type="button" data-material-step="edit-material-power" data-direction="-1" aria-label="Decrease cutting power">−</button><button type="button" data-material-step="edit-material-power" data-direction="1" aria-label="Increase cutting power">+</button></div>
           </div>
           <div>
             <label for="edit-material-kerf">Kerf</label>
-            <div class="input-wrap"><input id="edit-material-kerf" type="number" required min="0" max="1" step="any" value="0.15" aria-describedby="edit-material-error" /><span>mm</span></div>
+            <div class="input-wrap pattern-stepper"><input id="edit-material-kerf" type="number" required min="0" max="1" step="any" value="0.15" aria-describedby="edit-material-error" /><span>mm</span><button type="button" data-material-step="edit-material-kerf" data-direction="-1" aria-label="Decrease material kerf">−</button><button type="button" data-material-step="edit-material-kerf" data-direction="1" aria-label="Increase material kerf">+</button></div>
           </div>
         </div>
         <p id="edit-material-error" class="error" role="status"></p>

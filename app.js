@@ -17,6 +17,7 @@ let boxViewer = null;
 let boxViewerPromise = null;
 let boxPreviewRevision = 0;
 const number = value => String(Number(value.toFixed(6)));
+const displayNumber = value => String(Number(value.toFixed(3)));
 
 const patternDetails = {
   kakuasa: {
@@ -163,6 +164,12 @@ function repeatLayout(pattern, pitch, rows, secondPattern, position = 1) {
     ...(selected ?? { span: NaN }) };
 }
 
+function goldenBandPosition(positions) {
+  const target = (Math.sqrt(5) - 1) / 2;
+  return positions.reduce((best, item, index) => Math.abs(item.topSpan / item.span - target)
+    < Math.abs(positions[best].topSpan / positions[best].span - target) ? index : best, 0) + 1;
+}
+
 function syncBandPosition(layout, requested) {
   const input = document.querySelector('#kumiko-split');
   const maximum = layout.positions.length;
@@ -170,8 +177,12 @@ function syncBandPosition(layout, requested) {
   input.max = String(maximum);
   input.value = String(position);
   input.disabled = maximum === 1;
+  const golden = goldenBandPosition(layout.positions);
   const selected = layout.positions[position - 1];
   input.setAttribute('aria-valuetext', `Position ${position} of ${maximum}: ${selected.topRows} top rows and ${selected.bottomRows} bottom rows`);
+  const marker = document.querySelector('#kumiko-band-golden');
+  marker.style.left = `${maximum === 1 ? 50 : (golden - 1) / (maximum - 1) * 100}%`;
+  marker.title = `Golden ratio: position ${golden} (${displayNumber(layout.positions[golden - 1].topSpan / layout.positions[golden - 1].span * 100)}% top)`;
   return position;
 }
 
@@ -235,7 +246,40 @@ function syncPatternSizing() {
     document.querySelector(`#${prefix}-width`).value = String(width);
     document.querySelector(`#${prefix}-height`).value = String(height);
   }
+  document.querySelector('#kumiko-panel-size').textContent = `Panel: ${displayNumber(width)} × ${displayNumber(height)} mm`;
   return layout;
+}
+
+function syncKerfIncrement() {
+  const [first, last, increment] = kerfInputs;
+  const step = Math.round(numericValue(increment) * 1000);
+  if (!Number.isFinite(step) || step < 1 || step > 1000) return;
+  const bound = Math.floor(1000 / step) * step;
+  for (const input of [first, last]) {
+    input.step = String(step / 1000);
+    input.min = String(-bound / 1000);
+    input.max = String(bound / 1000);
+    const value = numericValue(input);
+    if (Number.isFinite(value)) {
+      input.value = String(Math.max(-bound, Math.min(bound, Math.round(value * 1000 / step) * step)) / 1000);
+    }
+  }
+  if (Number.isFinite(numericValue(first)) && Number.isFinite(numericValue(last))) {
+    // Keep an ordered range with at most 15 samples after reducing the increment.
+    last.value = String(Math.min(numericValue(first) * 1000 + 14 * step,
+      Math.max(numericValue(first) * 1000, numericValue(last) * 1000)) / 1000);
+  }
+}
+
+function stepMaterialField(input, direction) {
+  const id = input.id;
+  const step = id === 'kerf-min' || id === 'kerf-max'
+    ? numericValue(kerfInputs[2]) : id === 'kerf-step' || id.endsWith('-kerf') ? 0.01
+    : id.endsWith('-thickness') ? 0.5 : 1;
+  if (!Number.isFinite(step) || step <= 0) return;
+  const value = numericValue(input);
+  const next = Number.isFinite(value) ? value + direction * step : Number(input.min);
+  input.value = String(Number(Math.max(Number(input.min), Math.min(Number(input.max), next)).toFixed(3)));
 }
 
 function readKerfs() {
@@ -632,7 +676,7 @@ function kumikoDrawing(options = {}) {
     content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(d => `<path d="${d}" />`).join('')}</g></g>`,
     preview: `<path d="${outer} ${openings.join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`,
     filename: `kumiko-${pattern}-${number(width)}x${number(height)}mm.svg`,
-    description: `${number(width)} × ${number(height)} mm`,
+    description: `${displayNumber(width)} × ${displayNumber(height)} mm`,
     label: `${name} Kumiko panel, ${number(width)} by ${number(height)} millimeters, with ${openings.length} cutouts`,
     hint: `${openings.length} closed cutouts + outer frame · millimeter units` };
 }
@@ -893,13 +937,13 @@ function assemblyDrawing() {
   if (panelWidth <= 2 * thickness + kerf) throw new Error('Panel width must exceed twice the material thickness plus the kerf.');
   const legHeight = numericValue(legInputs[0]);
   const legWidth = numericValue(legInputs[1]);
-  if (!Number.isFinite(legHeight) || legHeight < 0.5 || legHeight > 100) throw new Error('Enter a leg height from 0.5 to 100 mm.');
+  if (!Number.isFinite(legHeight) || legHeight < 0 || legHeight > 100) throw new Error('Enter a leg height from 0 to 100 mm.');
   if (!Number.isFinite(legWidth) || legWidth < 1 || legWidth > 100) throw new Error('Enter a leg width from 1 to 100 mm.');
-  if (legWidth <= kerf + 0.5) throw new Error('Leg width must exceed kerf + 0.5 mm.');
-  if (panelWidth - 2 * thickness - 2 * legWidth <= kerf + 0.5) throw new Error('Reduce leg width or increase panel width to leave an opening between the legs.');
+  if (legHeight > 0 && legWidth <= kerf + 0.5) throw new Error('Leg width must exceed kerf + 0.5 mm.');
+  if (legHeight > 0 && panelWidth - 2 * thickness - 2 * legWidth <= kerf + 0.5) throw new Error('Reduce leg width or increase panel width to leave an opening between the legs.');
   const [bottomOffset, bottomFingers, cordDiameter, bottomOver] = bottomInputs.map(numericValue);
-  if (!Number.isFinite(bottomOffset) || bottomOffset < 0.5 || bottomOffset > 1000) throw new Error('Enter clearance under fingers from 0.5 to 1,000 mm.');
-  if (!Number.isFinite(bottomOver) || bottomOver < 0.5 || bottomOver > 1000) throw new Error('Enter clearance over fingers from 0.5 to 1,000 mm.');
+  if (!Number.isFinite(bottomOffset) || bottomOffset < 1 || bottomOffset > 1000) throw new Error('Enter clearance under fingers from 1 to 1,000 mm.');
+  if (!Number.isFinite(bottomOver) || bottomOver < 1 || bottomOver > 1000) throw new Error('Enter clearance above fingers from 1 to 1,000 mm.');
   if (bottomOver <= kerf + 0.5) throw new Error('Clearance over fingers must exceed kerf + 0.5 mm.');
   const frameWidth = numericValue(document.querySelector('#kumiko-frame'));
   // The bottom frame is shared with the clearance above the bottom fingers.
@@ -991,8 +1035,8 @@ function assemblyDrawing() {
     preview: panels.map(panel => `<text x="${number(panel.x)}" y="${number(panel.y - labelSpace / 4)}" fill="#202f61" stroke="none" font-family="monospace" font-size="${number(labelSpace * 0.65)}">${panel.name.toUpperCase()}</text><path d="${panel.previewPath} ${panel.openings.map(opening => opening.path).join(' ')} ${panel.windows.map(window => window.path).join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`).join(''),
     joints: `${fingers} front/back fingers · ${fingers - 1} left/right and top fingers per edge · ${number(Number(pitch.toFixed(3)))} mm vertical segments · ${number(Number(topPitch.toFixed(3)))} mm top segments · ${number(thickness)} mm joint depth · Bottom: ${bottomFingers} fingers per edge, ${number(Number(bottomPitch.toFixed(3)))} mm wide, ${number(bottomOffset)} mm under / ${number(bottomOver)} mm over · ${number(cordDiameter)} mm cord notch`,
     filename: `assembly-${kumikoPattern.value}${pattern.combination ? `-${document.querySelector('#kumiko-second-pattern').value}-${pattern.combination.layout === 'bands' ? `position-${pattern.combination.position}` : pattern.combination.layout}` : ''}-${number(panelWidth)}x${number(totalHeight)}mm-total-${number(legHeight)}mm-legs-${number(thickness)}mm-material.svg`,
-    description: `Box: ${number(panelWidth)} × ${number(panelWidth)} × ${number(totalHeight)} mm (including legs)`,
-    label: `${panels.length} box panels: ${panelNames.join(', ')}. ${pattern.patternName} pattern with ${wallOpeningCount} cutouts across the side walls and ${topOpenings.length} in the top.${wrapInterlocking ? ' The river continues around Front, Right, Back, Left and closes at the front seam.' : ''} Bottom fingers fit ${4 * bottomFingers} closed wall windows. A ${number(cordDiameter)} millimeter cord notch opens from the center of one bottom edge. Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall. Outside size ${panelWidth} by ${panelWidth} by ${totalHeight} millimeters including legs. Pattern panel height ${panelHeight} millimeters. Wall body height ${bodyHeight} millimeters.`,
+    description: `Box: ${displayNumber(panelWidth)} × ${displayNumber(panelWidth)} × ${displayNumber(totalHeight)} mm (including legs)`,
+    label: `${panels.length} box panels: ${panelNames.join(', ')}. ${pattern.patternName} pattern with ${wallOpeningCount} cutouts across the side walls and ${topOpenings.length} in the top.${wrapInterlocking ? ' The river continues around Front, Right, Back, Left and closes at the front seam.' : ''} Bottom fingers fit ${4 * bottomFingers} closed wall windows. A ${number(cordDiameter)} millimeter cord notch opens from the center of one bottom edge. ${legHeight > 0 ? `Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall.` : 'No legs.'} Outside size ${panelWidth} by ${panelWidth} by ${totalHeight} millimeters including legs. Pattern panel height ${panelHeight} millimeters. Wall body height ${bodyHeight} millimeters.`,
     hint: `${panels.length} panel outlines + ${wallOpeningCount + topOpenings.length} pattern cutouts + ${4 * bottomFingers} windows · kerf compensated · millimeter units` };
 }
 
@@ -1037,11 +1081,21 @@ function updateBoxPreview(drawing) {
   document.querySelector('#box-material').textContent = `${savedMaterials.find(material => material.id === selectedMaterialId).name} · ${number(drawing.model.thickness)} mm`;
   const details = patternDetails[kumikoPattern.value];
   document.querySelector('#box-pattern-name').textContent = drawing.patternName || details.name;
-  document.querySelector('#box-pattern-description').textContent = document.querySelector('#kumiko-combine').checked
+  const combined = document.querySelector('#kumiko-combine').checked;
+  const secondDetails = patternDetails[document.querySelector('#kumiko-second-pattern').value];
+  const summary = document.querySelector('#box-pattern-summary');
+  summary.hidden = !combined;
+  summary.textContent = combined
     ? document.querySelector('#kumiko-combination-layout').value === 'bands'
-      ? `Two pattern bands joined by a solid divider. ${details.name} above; ${patternDetails[document.querySelector('#kumiko-second-pattern').value].name} below.`
-      : `${details.name} and ${patternDetails[document.querySelector('#kumiko-second-pattern').value].name} share one triangular lattice, with ${document.querySelector('#kumiko-combination-layout').value === 'islands' ? 'hexagonal motif islands' : 'a river of simpler cells flowing around all four walls'}.`
-    : details.description;
+      ? `Two pattern bands joined by a solid divider. ${details.name} above; ${secondDetails.name} below.`
+      : `${details.name} and ${secondDetails.name} share one triangular lattice, with ${document.querySelector('#kumiko-combination-layout').value === 'islands' ? 'hexagonal motif islands' : 'a river of simpler cells flowing around all four walls'}.`
+    : '';
+  document.querySelector('#box-pattern-description').replaceChildren(...(combined ? [details, secondDetails] : [details]).map(detail => {
+    const note = document.createElement('p');
+    note.className = 'pattern-note';
+    note.textContent = combined ? `${detail.name} — ${detail.description}` : detail.description;
+    return note;
+  }));
   stage.setAttribute('aria-label', `Assembled 3D box. ${drawing.label}`);
   loading.hidden = false;
   stage.hidden = true;
@@ -1159,9 +1213,9 @@ function updatePreview() {
     if (currentDrawing.model) {
       const size = currentDrawing.model;
       for (const prefix of ['assembly', 'box']) {
-        document.querySelector(`#${prefix}-total-width`).textContent = `${number(size.panelWidth)} mm`;
-        document.querySelector(`#${prefix}-total-depth`).textContent = `${number(size.panelWidth)} mm`;
-        document.querySelector(`#${prefix}-total-height`).textContent = `${number(size.totalHeight)} mm`;
+        document.querySelector(`#${prefix}-total-width`).textContent = `${displayNumber(size.panelWidth)} mm`;
+        document.querySelector(`#${prefix}-total-depth`).textContent = `${displayNumber(size.panelWidth)} mm`;
+        document.querySelector(`#${prefix}-total-height`).textContent = `${displayNumber(size.totalHeight)} mm`;
       }
     }
     error.textContent = '';
@@ -1176,12 +1230,12 @@ function updatePreview() {
     document.querySelector('#download-hint').textContent = mode === 'assembly'
       ? `${number(currentDrawing.width)} × ${number(currentDrawing.height)} mm`
       : currentDrawing.hint;
-    document.querySelector('#kumiko-cell-dimensions').textContent = currentDrawing.cellDimensions || '';
     document.querySelector('#assembly-preview-note').textContent = currentDrawing.previewNote || '';
     // Preview overlays and optional exaggeration never enter the downloaded SVG.
     preview.innerHTML = `<svg viewBox="0 0 ${currentDrawing.width} ${currentDrawing.height}" aria-hidden="true" fill="none" stroke="#000000" stroke-width="0.09">${previewContent(currentDrawing)}</svg>`;
   } catch (issue) {
     currentDrawing = null;
+    document.querySelector('#kumiko-panel-size').textContent = '';
     document.querySelector('#download-hint').textContent = '';
     for (const prefix of ['assembly', 'box']) {
       ['width', 'depth', 'height'].forEach(dimension => { document.querySelector(`#${prefix}-total-${dimension}`).textContent = '—'; });
@@ -1193,7 +1247,6 @@ function updatePreview() {
       document.querySelector('#box-error').textContent = issue.message;
       document.querySelector('#box-dimensions').textContent = 'Enter valid dimensions in Assembly';
     }
-    document.querySelector('#kumiko-cell-dimensions').textContent = '';
     document.querySelector('#assembly-preview-note').textContent = '';
     error.textContent = issue.message;
     downloadButton.disabled = true;
@@ -1206,6 +1259,12 @@ function updatePreview() {
   assemblyInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
   bottomInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
   legInputs.forEach(input => input.setAttribute('aria-invalid', String(mode === 'assembly' && !currentDrawing)));
+  document.querySelectorAll('[data-assembly-step]').forEach(button => {
+    const input = document.querySelector(`#${button.dataset.assemblyStep}`);
+    const value = numericValue(input);
+    button.disabled = !Number.isFinite(value) || (Number(button.dataset.direction) < 0
+      ? value <= Number(input.min) : value >= Number(input.max));
+  });
   const cellCount = numericValue(document.querySelector('#kumiko-cell-count'));
   document.querySelector('#kumiko-decrease').disabled = !Number.isInteger(cellCount) || cellCount <= 1 || cellCount > 100;
   document.querySelector('#kumiko-increase').disabled = !Number.isInteger(cellCount) || cellCount < 1 || cellCount >= 100;
@@ -1213,7 +1272,12 @@ function updatePreview() {
   const rows = numericValue(rowInput), step = Number(rowInput.step);
   document.querySelector('#kumiko-rows-decrease').disabled = !Number.isInteger(rows) || rows - step < Number(rowInput.min);
   document.querySelector('#kumiko-rows-increase').disabled = !Number.isInteger(rows) || rows + step > 200;
-
+  for (const field of ['pitch', 'frame', 'strut', 'infill-strut']) {
+    const input = document.querySelector(`#kumiko-${field}`);
+    const value = numericValue(input);
+    document.querySelector(`#kumiko-${field}-decrease`).disabled = !Number.isFinite(value) || value <= Number(input.min);
+    document.querySelector(`#kumiko-${field}-increase`).disabled = !Number.isFinite(value) || value >= Number(input.max);
+  }
 }
 
 function setMode(nextMode) {
@@ -1242,8 +1306,8 @@ function setMode(nextMode) {
     if (button.tagName === 'BUTTON') button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
   });
   const settings = {
-    material: ['01', 'Material', 'Kerf test', '20 mm pieces. Compensation only on the mating edges.'],
-    kumiko: ['02', 'Pattern', 'Pattern & panel', 'Repeating geometry. A continuous lattice inside a solid frame.'],
+    material: ['01', 'Material', 'Kerf test', ''],
+    kumiko: ['02', 'Pattern', 'Pattern & panel', ''],
     assembly: ['03', 'Assembly', 'Panels & joints', 'Four patterned walls with legs, a patterned top, and a bottom with finger joints.'],
     preview: ['04', 'Preview', 'Assembled box', 'Drag to rotate the assembled box.']
   }[mode];
@@ -1251,6 +1315,7 @@ function setMode(nextMode) {
   document.querySelector('#title').innerHTML = `${title}<span>${index}</span>`;
   document.querySelector('#controls-title').textContent = controlsTitle;
   document.querySelector('#description').textContent = description;
+  document.querySelector('#description').hidden = !description;
   document.querySelector('#footer-mode').textContent = `${index} — ${title}`;
   updatePreview();
 }
@@ -1299,16 +1364,8 @@ function materialSummary(material) {
   return `${material.thickness} mm thick · Speed: ${material.speed === '' ? 'unset' : material.speed + '%'} · Power: ${material.power === '' ? 'unset' : material.power + '%'} · Kerf: ${material.kerf} mm`;
 }
 function syncMaterialSelectors() {
-  ['assembly'].forEach(mode => {
-    const select = document.querySelector(`#${mode}-material`);
-    select.replaceChildren(...savedMaterials.map(material => {
-      const option = document.createElement('option');
-      option.value = material.id;
-      option.textContent = material.name;
-      return option;
-    }));
-    select.value = selectedMaterialId;
-  });
+  const material = savedMaterials.find(value => value.id === selectedMaterialId);
+  document.querySelector('#assembly-material').textContent = `${material.name} · ${material.thickness} mm`;
   document.querySelectorAll('input[name="selected-material"]').forEach(input => { input.checked = input.value === selectedMaterialId; });
 }
 function selectMaterial(id) {
@@ -1318,7 +1375,6 @@ function selectMaterial(id) {
   applyMaterial(material);
   persistMaterials();
 }
-document.querySelector('#assembly-material').addEventListener('change', event => selectMaterial(event.target.value));
 function clearMaterialForm() {
   materialFields.forEach(field => {
     const input = document.querySelector(`#material-${field}`);
@@ -1482,6 +1538,24 @@ applyMaterial(savedMaterials.find(value => value.id === selectedMaterialId));
 const linkedDimensionInputs = ['kumiko', 'assembly'].flatMap(generator =>
   ['width', 'height'].map(dimension => document.querySelector(`#${generator}-${dimension}`))
 );
+document.querySelector('#kerf-step').addEventListener('input', syncKerfIncrement);
+document.querySelectorAll('[data-assembly-step]').forEach(button => {
+  button.addEventListener('click', () => {
+    const input = document.querySelector(`#${button.dataset.assemblyStep}`);
+    const value = numericValue(input);
+    if (!Number.isFinite(value)) return;
+    input.value = String(Number(Math.min(Number(input.max), Math.max(Number(input.min),
+      value + Number(button.dataset.direction))).toFixed(6)));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+});
+document.querySelectorAll('[data-material-step]').forEach(button => {
+  button.addEventListener('click', () => {
+    const input = document.querySelector(`#${button.dataset.materialStep}`);
+    stepMaterialField(input, Number(button.dataset.direction));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+});
 [...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs]
   .filter(input => !linkedDimensionInputs.includes(input) && input.id !== 'kumiko-rows')
   .forEach(input => input.addEventListener('input', updatePreview));
@@ -1528,7 +1602,7 @@ function syncCombinationControls() {
   syncInfillControls();
   fitPatternRows();
   document.querySelector('#kumiko-combine-help').textContent = layout === 'bands'
-    ? 'Two bands share a frame and a solid divider matching the lattice width. Walls use both patterns; the top panel uses only the top pattern.'
+    ? 'Both bands use whole repeats and share cell size, frame, and divider. Band position selects a whole-repeat boundary. The top panel uses only the top pattern.'
     : layout === 'interlock'
     ? 'Compatible motifs share one triangular lattice. In Assembly and Preview, the design continues around all four walls and closes at the final corner.'
     : 'Compatible motifs fill whole cells on one triangular lattice, with no extra divider. Applies to walls and top. Inspired by kumiko infill compositions.';
@@ -1577,6 +1651,42 @@ for (const [field, limit] of [['cell-count', 100], ['rows', 200]]) {
     });
   }
 }
+for (const field of ['pitch', 'frame', 'strut', 'infill-strut']) {
+  for (const [direction, delta] of [['decrease', -1], ['increase', 1]]) {
+    document.querySelector(`#kumiko-${field}-${direction}`).addEventListener('click', () => {
+      const input = document.querySelector(`#kumiko-${field}`);
+      const value = numericValue(input);
+      if (!Number.isFinite(value)) return;
+      const next = Math.min(Number(input.max), Math.max(Number(input.min), value + delta * Number(input.step)));
+      input.value = String(Number(next.toFixed(6)));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+}
+document.querySelectorAll('.info-button').forEach(button => {
+  const tooltip = document.getElementById(button.getAttribute('aria-controls'));
+  const area = button.parentElement;
+  let pinned = false;
+  function show(showTooltip) {
+    tooltip.hidden = !showTooltip;
+    button.setAttribute('aria-expanded', String(showTooltip));
+  }
+  function close() { pinned = false; show(false); }
+  area.addEventListener('pointerenter', event => {
+    if (event.pointerType === 'mouse') show(true);
+  });
+  area.addEventListener('pointerleave', () => {
+    if (!pinned) show(false);
+  });
+  button.addEventListener('click', () => { pinned = !pinned; show(pinned); });
+  button.addEventListener('blur', close);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') close();
+  });
+  document.addEventListener('click', event => {
+    if (!area.contains(event.target)) close();
+  });
+});
 document.querySelectorAll('button[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
 downloadButton.addEventListener('click', () => {
   if (!currentDrawing) return;
@@ -1599,6 +1709,12 @@ try {
 } catch {
   // Use the default tab when local storage is unavailable.
 }
-syncInfillControls();
+syncCombinationControls();
 syncRatioControl();
 setMode(initialMode);
+// Browsers can restore checkbox/select values after the script initializes,
+// including when returning to a page from the back/forward cache.
+window.addEventListener('pageshow', () => {
+  syncCombinationControls();
+  updatePreview();
+});

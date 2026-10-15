@@ -29,6 +29,43 @@ function generators(pattern = 'goma') {
   } };
 }
 
+test('kerf increment changes snap endpoints and retain an ordered range of up to 15 pairs', () => {
+  const { context, set } = generators();
+  set('kerf-min', -0.13);
+  set('kerf-max', 0.31);
+  set('kerf-step', 0.06);
+  context.syncKerfIncrement();
+  assert.deepEqual(Array.from(context.readKerfs()), [-0.12, -0.06, 0, 0.06, 0.12, 0.18, 0.24, 0.3]);
+  assert.equal(context.document.querySelector('#kerf-min').step, '0.06');
+  set('kerf-step', 0.01);
+  context.syncKerfIncrement();
+  assert.equal(context.readKerfs().length, 15);
+  assert.equal(context.document.querySelector('#kerf-max').value, '0.02');
+  set('kerf-min', 1);
+  set('kerf-max', -1);
+  set('kerf-step', 0.3);
+  context.syncKerfIncrement();
+  assert.deepEqual(Array.from(context.readKerfs()), [0.9]);
+});
+
+test('material buttons use field-specific steps and clamp to bounds', () => {
+  const { context } = generators();
+  context.document.querySelector('#kerf-step').value = '0.06';
+  for (const [id, value, min, max, expected] of [
+    ['kerf-min', '0', '-1', '1', '0.06'],
+    ['kerf-max', '0.3', '-1', '1', '0.36'],
+    ['kerf-step', '0.06', '0.001', '1', '0.07'],
+    ['material-thickness', '', '0.5', '50', '0.5'],
+    ['material-speed', '2', '0', '100', '3'],
+    ['material-power', '100', '0', '100', '100'],
+    ['edit-material-kerf', '0.1', '0', '1', '0.11']
+  ]) {
+    const input = { id, value, min, max, validity: {} };
+    context.stepMaterialField(input, 1);
+    assert.equal(input.value, expected, id);
+  }
+});
+
 test('exact sizing derives panel dimensions from cell size and complete row repeats', () => {
   for (const pattern of ['triangular', 'asanoha', 'goma', 'sakura', 'rindo', 'kagome', 'tsumiishi-kikko',
     'kakuasa', 'masu', 'masu-tsunagi', 'shokko', 'diamond', 'senbon']) {
@@ -193,7 +230,7 @@ test('shared motifs retain the same snapped grid, independently of their infill'
   assert.equal(assembly.model.panelHeight, drawing.height);
 });
 
-test('band positions visit every valid whole-repeat divider', () => {
+test('band slider visits every valid divider and marks the closest golden ratio split', () => {
   for (const [first, second] of [['asanoha', 'goma'], ['masu', 'shokko'], ['kakuasa', 'sakura']]) {
     const { context, set } = generators(first);
     vm.runInContext('dimensionsLinked = false', context);
@@ -212,10 +249,14 @@ test('band positions visit every valid whole-repeat divider', () => {
       assert.equal(context.document.querySelector('#kumiko-split').max, String(positions.length));
       assert.ok(positions[position - 1].topRows > 0 && positions[position - 1].bottomRows > 0);
     }
+    const golden = context.goldenBandPosition(positions);
+    const error = item => Math.abs(item.topSpan / item.span - (Math.sqrt(5) - 1) / 2);
+    assert.ok(positions.every(item => error(item) >= error(positions[golden - 1]) - 1e-10));
+    assert.equal(context.document.querySelector('#kumiko-band-golden').style.left, `${(golden - 1) / (positions.length - 1) * 100}%`);
   }
 });
 
-test('band position clamps when rows shrink to one valid divider', () => {
+test('band slider clamps to the available range when rows shrink to one valid divider', () => {
   const { context, set } = generators('asanoha');
   vm.runInContext('dimensionsLinked = false', context);
   set('kumiko-combine', true);
@@ -223,13 +264,49 @@ test('band position clamps when rows shrink to one valid divider', () => {
   set('kumiko-rows', 10);
   set('kumiko-split', 4);
   context.syncPatternSizing();
+  assert.equal(context.goldenBandPosition(context.bandPositions('asanoha', 27.2, 10, 'goma')), 3);
   set('kumiko-rows', 4);
   context.syncPatternSizing();
   const input = context.document.querySelector('#kumiko-split');
   assert.equal(input.value, '1');
   assert.equal(input.max, '1');
   assert.equal(input.disabled, true);
+  assert.equal(context.document.querySelector('#kumiko-band-golden').style.left, '50%');
   assert.equal(context.kumikoDrawing().combination.position, 1);
+});
+
+test('startup and restored pages synchronize the combined-pattern menu with the checkbox', () => {
+  const { context, set } = generators('diamond');
+  const events = new Map();
+  context.window = { addEventListener: (name, handler) => events.set(name, handler) };
+  context.localStorage = { getItem: () => 'kumiko' };
+  context.syncRatioControl = () => {};
+  context.setMode = () => {};
+  context.updatePreview = () => {};
+  vm.runInContext(`
+    const secondPatternSelect = document.querySelector('#kumiko-second-pattern');
+    const patternPicker = { setAllowedValues() {}, sync() {} };
+    const secondPatternPicker = { setAllowedValues() {}, sync() {} };
+    let bandPatternPair = null;
+    let previousCombinationLayout = 'bands';
+  `, context);
+  const start = source.indexOf('function syncCombinationControls()');
+  const end = source.indexOf("document.querySelector('#kumiko-combine').addEventListener", start);
+  vm.runInContext(source.slice(start, end), context);
+  const controls = context.document.querySelector('#kumiko-combine-controls');
+  controls.hidden = true;
+  set('kumiko-combine', true);
+  vm.runInContext(source.slice(source.indexOf("let initialMode = 'material';")), context);
+  assert.equal(controls.hidden, false, 'A restored checked checkbox exposes the menu during startup');
+  set('kumiko-combine', false);
+  events.get('pageshow')();
+  assert.equal(controls.hidden, true);
+  set('kumiko-combine', true);
+  set('kumiko-combination-layout', 'interlock');
+  events.get('pageshow')();
+  assert.equal(controls.hidden, false, 'Late browser restoration exposes the menu on pageshow');
+  assert.equal(context.document.querySelector('#kumiko-band-share').hidden, true);
+  assert.equal(vm.runInContext('kumikoPattern.value', context), 'triangular');
 });
 
 for (const [pattern, name, vertexCounts] of [
@@ -483,7 +560,7 @@ test('cord diameter rejects invalid values and collisions with bottom fingers', 
 
 test('assembly shares the bottom frame with finger clearance when calculating total height', () => {
   const { context, set } = generators();
-  for (const [under, over, legs] of [[10, 10, 10], [18, 7, 15], [5, 25, 8]]) {
+  for (const [under, over, legs] of [[10, 10, 10], [18, 7, 15], [5, 25, 8], [5, 5, 0]]) {
     set('assembly-bottom-offset', under);
     set('assembly-bottom-over', over);
     set('assembly-leg-height', legs);
@@ -509,7 +586,7 @@ test('assembly shares the bottom frame with finger clearance when calculating to
 test('assembly rejects missing or invalid finger clearances', () => {
   for (const id of ['assembly-bottom-offset', 'assembly-bottom-over']) {
     const { context, set } = generators();
-    for (const value of ['', 0, -5, 1001]) {
+    for (const value of ['', 0, 0.5, 0.99, -5, 1001]) {
       set(id, value);
       assert.throws(() => context.assemblyDrawing(), /clearance/i);
     }
