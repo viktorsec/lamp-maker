@@ -3,7 +3,7 @@ const dimensions = document.querySelector('#dimensions');
 const error = document.querySelector('#size-error');
 const preview = document.querySelector('#preview');
 const kerfInputs = ['min', 'max', 'step'].map(name => document.querySelector(`#kerf-${name}`));
-const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame'].map(name => document.querySelector(`#kumiko-${name}`));
+const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame', 'infill-strut'].map(name => document.querySelector(`#kumiko-${name}`));
 const kumikoPattern = document.querySelector('#kumiko-pattern');
 const assemblyInputs = ['width', 'height', 'thickness', 'kerf', 'fingers'].map(name => document.querySelector(`#assembly-${name}`));
 const bottomInputs = ['offset', 'fingers', 'cord-diameter', 'over'].map(name => document.querySelector(`#assembly-bottom-${name}`));
@@ -250,15 +250,27 @@ function clipPolygon(points, distance) {
   return result;
 }
 
+const infillPatterns = ['asanoha', 'goma', 'sakura', 'tsumiishi-kikko', 'rindo', 'kakuasa', 'masu-tsunagi', 'shokko'];
+
+function syncInfillControls() {
+  const patterns = [kumikoPattern.value];
+  if (document.querySelector('#kumiko-combine').checked) patterns.push(document.querySelector('#kumiko-second-pattern').value);
+  const applicable = patterns.some(pattern => infillPatterns.includes(pattern));
+  document.querySelector('#kumiko-infill-controls').hidden = !applicable;
+  document.querySelector('#kumiko-infill-strut').disabled = !applicable;
+}
+
 function kumikoDrawing(options = {}) {
   if (options.combine !== false && options.pattern === undefined && document.querySelector('#kumiko-combine').checked) {
     return combinedPatternDrawing(options);
   }
-  let { panelWidth, panelHeight, pattern = kumikoPattern.value, cellCount, strut, frame } = options;
+  let { panelWidth, panelHeight, pattern = kumikoPattern.value, cellCount, strut, frame, infillStrut } = options;
   const [inputWidth, inputHeight, inputCellCount, inputStrut, inputFrame] = kumikoInputs.map(numericValue);
   cellCount ??= inputCellCount;
   strut ??= inputStrut;
   frame ??= inputFrame;
+  const hasInfill = [pattern, ...(options.trianglePatterns ?? [])].some(value => infillPatterns.includes(value));
+  infillStrut = hasInfill ? infillStrut ?? numericValue(document.querySelector('#kumiko-infill-strut')) : strut;
   const width = panelWidth ?? inputWidth;
   const height = panelHeight ?? inputHeight;
   const limits = [[10, 1000], [10, 1000], [1, 100], [0.5, 20], [1, 100]];
@@ -267,6 +279,9 @@ function kumikoDrawing(options = {}) {
     throw new Error('Enter all pattern dimensions within the displayed ranges.');
   }
   if (!Number.isInteger(cellCount)) throw new Error('Enter a whole pattern cell count from 1 to 100.');
+  if (hasInfill && (!Number.isFinite(infillStrut) || infillStrut < 0.5 || infillStrut > 20)) {
+    throw new Error('Enter an infill lattice width from 0.5 to 20 mm.');
+  }
   if (2 * frame >= Math.min(width, height)) throw new Error('Frame must be less than half the smaller panel dimension.');
   const asanoha = pattern === 'asanoha';
   const goma = pattern === 'goma';
@@ -304,26 +319,18 @@ function kumikoDrawing(options = {}) {
   }
   const openings = [];
   const openingPolygons = [];
-  function addOpening(cell) {
-    const perimeter = cell.reduce((sum, p, i) => {
-      const q = cell[(i + 1) % cell.length];
-      return sum + Math.hypot(q[0] - p[0], q[1] - p[1]);
-    }, 0);
-    const twiceArea = Math.abs(cell.reduce((sum, p, i) => {
-      const q = cell[(i + 1) % cell.length];
-      return sum + p[0] * q[1] - q[0] * p[1];
-    }, 0));
-    // Validate against the fitted geometry, including the automatically fitted row height.
-    if (strut >= 2 * twiceArea / perimeter) {
-      throw new Error('Reduce the lattice width or reduce the pattern cell count to leave open cutouts.');
-    }
+  function addOpening(cell, edgeWidths = cell.map(() => strut)) {
     let polygon = cell;
     cell.forEach((a, index) => {
       const b = cell[(index + 1) % cell.length];
       const dx = b[0] - a[0], dy = b[1] - a[1];
       const length = Math.hypot(dx, dy);
-      polygon = clipPolygon(polygon, p => (dx * (p[1] - a[1]) - dy * (p[0] - a[0])) / length - strut / 2);
+      polygon = clipPolygon(polygon, p => (dx * (p[1] - a[1]) - dy * (p[0] - a[0])) / length - edgeWidths[index] / 2);
     });
+    // Mixed widths must be validated together, before cropping to the frame.
+    if (polygon.length < 3 || polygonArea(polygon) < 1e-8) {
+      throw new Error('Reduce the lattice width or infill lattice width, or reduce the pattern cell count to leave open cutouts.');
+    }
     polygon = clipPolygon(polygon, p => p[0] - frame);
     polygon = clipPolygon(polygon, p => width - frame - p[0]);
     polygon = clipPolygon(polygon, p => p[1] - frame);
@@ -339,6 +346,19 @@ function kumikoDrawing(options = {}) {
       openings.push(outlinePath(polygon, 0, 0));
     }
   }
+  function addInfillOpening(cell, latticeCell) {
+    const widths = cell.map((a, i) => {
+      const b = cell[(i + 1) % cell.length];
+      const onLattice = latticeCell.some((p, j) => {
+        const q = latticeCell[(j + 1) % latticeCell.length];
+        const length = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        const distance = r => Math.abs((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])) / length;
+        return distance(a) < 1e-7 && distance(b) < 1e-7;
+      });
+      return onLattice ? strut : infillStrut;
+    });
+    addOpening(cell, widths);
+  }
   function splitCells(cells, distance) {
     return cells.flatMap(cell => [clipPolygon(cell, distance), clipPolygon(cell, p => -distance(p))])
       .map(cell => cell.filter((p, i) => {
@@ -347,7 +367,8 @@ function kumikoDrawing(options = {}) {
       }))
       .filter(cell => cell.length >= 3 && polygonArea(cell) > 1e-6);
   }
-  function addTriangle(triangle) {
+  function addTriangle(triangle, latticeCell = triangle) {
+    const addMotifOpening = cell => addInfillOpening(cell, latticeCell);
     const motif = options.trianglePattern?.(triangle, { pitch, rowHeight, latticeOrigin, rows, cellCount }) ?? pattern;
     const rindo = motif === 'rindo', sakura = motif === 'sakura', goma = motif === 'goma';
     const asanoha = motif === 'asanoha', tsumiishiKikko = motif === 'tsumiishi-kikko', kakuasa = motif === 'kakuasa';
@@ -362,7 +383,7 @@ function kumikoDrawing(options = {}) {
           cells = splitCells(cells, p => (end[0] - a[0]) * (p[1] - a[1]) - (end[1] - a[1]) * (p[0] - a[0]));
         }
       });
-      cells.forEach(addOpening);
+      cells.forEach(addMotifOpening);
       return;
     }
     if (sakura) {
@@ -373,8 +394,8 @@ function kumikoDrawing(options = {}) {
       triangle.forEach((a, index) => {
         const b = triangle[(index + 1) % 3], c = triangle[(index + 2) % 3];
         const nextTip = between(a, b, 1 / 4), previousTip = between(a, c, 1 / 4);
-        addOpening([a, nextTip, previousTip]);
-        addOpening([nextTip, between(a, b, 1 / 2), center, between(a, c, 1 / 2), previousTip]);
+        addMotifOpening([a, nextTip, previousTip]);
+        addMotifOpening([nextTip, between(a, b, 1 / 2), center, between(a, c, 1 / 2), previousTip]);
       });
       return;
     }
@@ -394,7 +415,7 @@ function kumikoDrawing(options = {}) {
           clipPolygon(cell, p => offset - side(p))
         ]).filter(cell => cell.length >= 3 && polygonArea(cell) > 0.000001);
       });
-      cells.forEach(addOpening);
+      cells.forEach(addMotifOpening);
       return;
     }
     if (!asanoha && !tsumiishiKikko && !kakuasa) return addOpening(triangle);
@@ -412,10 +433,10 @@ function kumikoDrawing(options = {}) {
         // neighboring triangles these spokes outline stacked hexagons,
         // while the original triangular lattice crosses their interiors.
         const next = triangle[(i + 1) % 3], previous = triangle[(i + 2) % 3];
-        addOpening([p, p.map((value, axis) => (value + next[axis]) / 2), center,
+        addMotifOpening([p, p.map((value, axis) => (value + next[axis]) / 2), center,
           p.map((value, axis) => (value + previous[axis]) / 2)]);
       } else {
-        addOpening([p, triangle[(i + 1) % 3], center]);
+        addMotifOpening([p, triangle[(i + 1) % 3], center]);
       }
     });
   }
@@ -427,7 +448,7 @@ function kumikoDrawing(options = {}) {
         if (kakuasa) {
           // Alternating diagonals let the leaf spokes meet at grid vertices.
           const triangles = (row + column) % 2 === 0 ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]];
-          triangles.forEach(addTriangle);
+          triangles.forEach(triangle => addTriangle(triangle, [a, b, c, d]));
         } else if (masuTsunagi) {
           // Two parallel strips in each diagonal direction create connected
           // measuring-cup squares, corner pentagons and edge triangles.
@@ -435,7 +456,7 @@ function kumikoDrawing(options = {}) {
           const u = p => (p[0] - x) / pitch, v = p => (p[1] - y) / rowHeight;
           for (const offset of [3 / 4, 5 / 4]) cells = splitCells(cells, p => u(p) + v(p) - offset);
           for (const offset of [-1 / 4, 1 / 4]) cells = splitCells(cells, p => u(p) - v(p) - offset);
-          cells.forEach(addOpening);
+          cells.forEach(cell => addInfillOpening(cell, [a, b, c, d]));
         } else {
           if (strut >= Math.min(pitch, rowHeight)) throw new Error('Reduce the lattice width or reduce the pattern cell count to leave open cutouts.');
           addOpening([a, b, c, d]);
@@ -480,7 +501,7 @@ function kumikoDrawing(options = {}) {
             let [x, y] = point;
             for (let rotation = 0; rotation < turn; rotation++) [x, y] = [-y, x];
             return [latticeOrigin + (column + x) * pitch / 2, latticeOrigin + (row + y) * rowHeight];
-          }));
+          }), quarter.map((_, i) => i === 0 || i === quarter.length - 1 ? strut : infillStrut));
         }
       }
     }
@@ -1358,17 +1379,17 @@ bottomFingerButtons.forEach(button => button.addEventListener('click', () => {
   updatePreview();
 }));
 const patternPicker = new PatternPicker(kumikoPattern, value => {
-  const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, frame: 2 });
+  const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, infillStrut: 1, frame: 2 });
   return `<svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">${drawing.preview}</svg>`;
 });
 const secondPatternSelect = document.querySelector('#kumiko-second-pattern');
 secondPatternSelect.replaceChildren(...Array.from(kumikoPattern.options, option => option.cloneNode(true)));
 secondPatternSelect.value = 'asanoha';
 const secondPatternPicker = new PatternPicker(secondPatternSelect, value => {
-  const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, frame: 2 });
+  const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, infillStrut: 1, frame: 2 });
   return `<svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">${drawing.preview}</svg>`;
 });
-secondPatternSelect.addEventListener('change', () => { secondPatternPicker.sync(); updatePreview(); });
+secondPatternSelect.addEventListener('change', () => { secondPatternPicker.sync(); syncInfillControls(); updatePreview(); });
 let bandPatternPair = null;
 let previousCombinationLayout = 'bands';
 function syncCombinationControls() {
@@ -1391,6 +1412,7 @@ function syncCombinationControls() {
   secondPatternPicker.setAllowedValues(shared ? sharedCellPatterns : null);
   patternPicker.sync();
   secondPatternPicker.sync();
+  syncInfillControls();
   document.querySelector('#kumiko-combine-help').textContent = layout === 'bands'
     ? 'Two bands share a frame and a solid divider matching the lattice width. Walls use both patterns; the top panel uses only the top pattern.'
     : layout === 'interlock'
@@ -1403,6 +1425,7 @@ document.querySelector('#kumiko-split').addEventListener('input', updatePreview)
 kumikoPattern.addEventListener('change', () => {
   patternPicker.sync();
   adjustPatternCellCount();
+  syncInfillControls();
   updatePreview();
 });
 const goldenRatio = (1 + Math.sqrt(5)) / 2;
@@ -1483,4 +1506,5 @@ try {
 } catch {
   // Use the default tab when local storage is unavailable.
 }
+syncInfillControls();
 setMode(initialMode);

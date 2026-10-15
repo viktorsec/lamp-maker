@@ -6,9 +6,9 @@
     <meta name="theme-color" content="#eee9d8" />
     <title>Lamp Maker — Cut files</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="styles.css?v=12" />
+    <link rel="stylesheet" href="styles.css?v=13" />
     <script src="pattern-picker.js?v=2" defer></script>
-    <script src="app.js?v=70" defer></script>
+    <script src="app.js?v=71" defer></script>
   </head>
   <body>
     <main>
@@ -171,6 +171,11 @@
             <p id="kumiko-cell-dimensions" class="hint" aria-live="polite"></p>
             <label for="kumiko-strut">Lattice width</label>
             <div class="input-wrap"><input id="kumiko-strut" type="number" min="0.5" max="20" step="any" value="2" aria-describedby="size-error" /><span>mm</span></div>
+            <div id="kumiko-infill-controls" hidden>
+              <label for="kumiko-infill-strut">Infill lattice width</label>
+              <div class="input-wrap"><input id="kumiko-infill-strut" type="number" min="0.5" max="20" step="any" value="1.5" aria-describedby="kumiko-infill-help size-error" /><span>mm</span></div>
+              <p id="kumiko-infill-help" class="hint">Width of the smaller strips inside the main lattice. Recommended at 50–75% of the lattice width.</p>
+            </div>
             <label for="kumiko-frame">Frame width</label>
             <div class="input-wrap"><input id="kumiko-frame" type="number" min="1" max="100" step="any" value="8" aria-describedby="size-error" /><span>mm</span></div>
             <p class="hint">Measured from the panel edge to the cutouts. Boundary spokes are included in this width.</p>

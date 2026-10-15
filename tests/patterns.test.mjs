@@ -148,6 +148,65 @@ test('Kakuasa square cells keep the traditional 22.5 degree leaf branches', () =
   }
 });
 
+test('infill width enlarges motif openings without moving the main Asanoha lattice', () => {
+  const { context } = generators('asanoha');
+  const wide = context.kumikoDrawing({ infillStrut: 2 });
+  const thin = context.kumikoDrawing({ infillStrut: 1 });
+  assert.equal(thin.openingPolygons.length, wide.openingPolygons.length);
+  assert.ok(thin.openingPolygons.reduce((sum, p) => sum + context.polygonArea(p), 0)
+    > wide.openingPolygons.reduce((sum, p) => sum + context.polygonArea(p), 0));
+  const horizontalEdges = drawing => [...new Set(drawing.openingPolygons.flatMap(points => points.flatMap((p, i) => {
+    const q = points[(i + 1) % points.length];
+    return Math.abs(p[1] - q[1]) < 1e-8 ? [p[1].toFixed(6)] : [];
+  })))].sort();
+  assert.deepEqual(horizontalEdges(thin), horizontalEdges(wide));
+});
+
+test('infill width applies only to motifs and visibility follows both selected patterns', () => {
+  for (const pattern of ['asanoha', 'goma', 'sakura', 'tsumiishi-kikko', 'rindo', 'kakuasa', 'masu-tsunagi', 'shokko',
+    'senbon', 'masu', 'diamond', 'triangular', 'kagome']) {
+    const { context, set } = generators(pattern);
+    const applicable = !['senbon', 'masu', 'diamond', 'triangular', 'kagome'].includes(pattern);
+    const controls = {};
+    const originalQuery = context.document.querySelector;
+    context.document.querySelector = selector => selector === '#kumiko-infill-controls' ? controls : originalQuery(selector);
+    context.syncInfillControls();
+    assert.equal(controls.hidden, !applicable, pattern);
+    const thin = context.kumikoDrawing({ infillStrut: 1 });
+    const wide = context.kumikoDrawing({ infillStrut: 2 });
+    assert.equal(thin.content === wide.content, !applicable, pattern);
+    set('kumiko-infill-strut', '');
+    if (applicable) assert.throws(() => context.kumikoDrawing(), /infill lattice width/);
+    else assert.doesNotThrow(() => context.kumikoDrawing());
+    set('kumiko-combine', true);
+    context.syncInfillControls();
+    assert.equal(controls.hidden, false, 'Asanoha accent must expose infill width');
+  }
+});
+
+test('infill edits reach combined panels, kerf-compensated assembly and reject collapsed openings', () => {
+  for (const layout of ['bands', 'islands', 'interlock']) {
+    const { context, set } = generators('asanoha');
+    set('kumiko-combine', true);
+    set('kumiko-second-pattern', 'goma');
+    set('kumiko-combination-layout', layout);
+    set('kumiko-infill-strut', 1);
+    const thin = context.assemblyDrawing();
+    set('kumiko-infill-strut', 2);
+    const wide = context.assemblyDrawing();
+    for (const panel of thin.panels.filter(panel => panel.name !== 'Bottom')) {
+      assert.notEqual(JSON.stringify(panel.openings), JSON.stringify(wide.panels.find(p => p.name === panel.name).openings));
+      for (const opening of panel.openings) assert.ok(context.polygonArea(opening.cutPoints) < context.polygonArea(opening.points));
+    }
+    for (const value of [0, 21, '']) {
+      set('kumiko-infill-strut', value);
+      assert.throws(() => context.kumikoDrawing(), /infill lattice width/);
+    }
+    set('kumiko-infill-strut', 20);
+    assert.throws(() => context.kumikoDrawing(), /Reduce the lattice width or infill/);
+  }
+});
+
 test('Senbon keeps equally spaced slots at full height as dimensions and density change', () => {
   const { context, set } = generators('senbon');
   for (const [width, height, count] of [[150, 243, 5], [243, 150, 8], [150, 1000, 100], [150, 243, 1]]) {
