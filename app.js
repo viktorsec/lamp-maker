@@ -468,10 +468,15 @@ function kumikoDrawing(options = {}) {
     if (rindo) {
       // Two cevians from each tip form the angular gentian flower and its
       // central hexagon. Partition into convex cells before adding the webs.
+      // Kasane-rindo uses 15°/75° ends and 90° crossings. In an equilateral
+      // triangle, the opposite-edge fraction is tan(15°) = 2 - sqrt(3).
+      // Keep this fraction on fitted lids so their infill stretches with the grid.
+      // Reference: https://bau-woodworks.com/category/kumiko-2/#:~:text=Kasane-Rindo
+      const branchFraction = 2 - Math.sqrt(3);
       let cells = [triangle];
       triangle.forEach((a, i) => {
         const b = triangle[(i + 1) % 3], c = triangle[(i + 2) % 3];
-        for (const t of [3 / 10, 7 / 10]) {
+        for (const t of [branchFraction, 1 - branchFraction]) {
           const end = b.map((value, axis) => value + (c[axis] - value) * t);
           cells = splitCells(cells, p => (end[0] - a[0]) * (p[1] - a[1]) - (end[1] - a[1]) * (p[0] - a[0]));
         }

@@ -80,6 +80,29 @@ test('triangular wall motifs retain equilateral cells, including Rindo', () => {
   }
 });
 
+test('Rindo branches follow the 15 degree construction angles on walls and fitted lids', () => {
+  const { context } = generators('rindo');
+  for (const cellCount of [3, 5, 7]) {
+    for (const surface of ['wall', 'top']) {
+      const drawing = context.kumikoDrawing({ panelWidth: 150, panelHeight: surface === 'top' ? 150 : 250,
+        cellCount, strut: 0.5, infillStrut: 0.5, surface });
+      // Undo only the lid's deliberate vertical fit before checking its motif.
+      const scaleY = surface === 'top' ? drawing.grid.pitch * Math.sqrt(3) / (2 * drawing.grid.rowHeight) : 1;
+      const angles = drawing.openingPolygons.flatMap(points => points.map((p, i) => {
+        const q = points[(i + 1) % points.length];
+        return (Math.atan2((q[1] - p[1]) * scaleY, q[0] - p[0]) * 180 / Math.PI + 180) % 180;
+      }));
+      for (const angle of angles) {
+        assert.ok(Math.abs(angle / 15 - Math.round(angle / 15)) < 1e-8,
+          `Unexpected Rindo strip angle: ${angle}`);
+      }
+      for (const branch of [15, 45, 75, 105, 135, 165]) {
+        assert.ok(angles.some(angle => Math.abs(angle - branch) < 1e-8), `Missing ${branch} degree branches`);
+      }
+    }
+  }
+});
+
 test('square lid uses the original uniform row fitting while square cells remain unchanged', () => {
   const { context } = generators('triangular');
   const canonical = polygons => Array.from(polygons, points => Array.from(points, ([x, y]) => `${x.toFixed(5)},${y.toFixed(5)}`).sort().join(';')).sort();
@@ -332,8 +355,9 @@ test('infill width applies only to motifs and visibility follows both selected p
     context.document.querySelector = selector => selector === '#kumiko-infill-controls' ? controls : originalQuery(selector);
     context.syncInfillControls();
     assert.equal(controls.hidden, !applicable, pattern);
-    const thin = context.kumikoDrawing({ infillStrut: 1 });
-    const wide = context.kumikoDrawing({ infillStrut: 2 });
+    // Keep Rindo's small corner openings clear at both thicknesses.
+    const thin = context.kumikoDrawing({ infillStrut: 1, cellCount: 3 });
+    const wide = context.kumikoDrawing({ infillStrut: 2, cellCount: 3 });
     assert.equal(thin.content === wide.content, !applicable, pattern);
     set('kumiko-infill-strut', '');
     if (applicable) assert.throws(() => context.kumikoDrawing(), /infill lattice width/);
