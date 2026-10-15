@@ -3,7 +3,7 @@ const dimensions = document.querySelector('#dimensions');
 const error = document.querySelector('#size-error');
 const preview = document.querySelector('#preview');
 const kerfInputs = ['min', 'max', 'step'].map(name => document.querySelector(`#kerf-${name}`));
-const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame', 'infill-strut'].map(name => document.querySelector(`#kumiko-${name}`));
+const kumikoInputs = ['width', 'height', 'cell-count', 'strut', 'frame', 'infill-strut', 'pitch', 'rows'].map(name => document.querySelector(`#kumiko-${name}`));
 const kumikoPattern = document.querySelector('#kumiko-pattern');
 const assemblyInputs = ['width', 'height', 'thickness', 'kerf', 'fingers'].map(name => document.querySelector(`#assembly-${name}`));
 const bottomInputs = ['offset', 'fingers', 'cord-diameter', 'over'].map(name => document.querySelector(`#assembly-bottom-${name}`));
@@ -125,24 +125,117 @@ const patternDetails = {
   }
 };
 
-let boostedPatternCellCount = null;
-function adjustPatternCellCount() {
-  const input = document.querySelector('#kumiko-cell-count');
-  const count = numericValue(input);
-  const boosted = ['senbon', 'masu'].includes(kumikoPattern.value);
-  if (boosted && !boostedPatternCellCount && Number.isInteger(count) && count >= 1 && count <= 100) {
-    const adjusted = Math.min(100, Math.ceil(count * 1.5));
-    boostedPatternCellCount = { original: count, adjusted };
-    input.value = String(adjusted);
-  } else if (!boosted && boostedPatternCellCount) {
-    if (Number.isInteger(count) && count >= 1 && count <= 100) {
-      // Restore exactly after rounding or clamping; preserve manual density edits.
-      input.value = String(count === boostedPatternCellCount.adjusted
-        ? boostedPatternCellCount.original
-        : Math.max(1, Math.round(count / 1.5)));
-    }
-    boostedPatternCellCount = null;
+// Repeat geometry is independent of panel dimensions and decorative infill.
+function latticeSpec(pattern, pitch) {
+  if (['masu', 'kakuasa', 'masu-tsunagi', 'senbon'].includes(pattern)) return { rowHeight: pitch, rowStep: 1 };
+  if (['diamond', 'shokko'].includes(pattern)) return { rowHeight: pitch / 2, rowStep: 2 };
+  return { rowHeight: pitch * Math.sqrt(3) / 2, rowStep: 2 };
+}
+
+// The lid retains the original uniform lattice, fitted to its square frame.
+function fittedLidRows(pattern, pitch, height, trianglePatterns = []) {
+  if (pattern === 'senbon') return 1;
+  if (['masu', 'kakuasa', 'masu-tsunagi'].includes(pattern)) return Math.max(1, Math.round(height / pitch));
+  const fitted = height / (pitch * (['diamond', 'shokko'].includes(pattern) ? 1 : Math.sqrt(3)));
+  return Math.max(2, 2 * (pattern === 'rindo' || trianglePatterns.includes('rindo') ? Math.floor(fitted) : Math.round(fitted)));
+}
+
+function bandPositions(pattern, pitch, rows, secondPattern) {
+  const first = latticeSpec(pattern, pitch), second = latticeSpec(secondPattern, pitch);
+  const positions = [];
+  for (let topRows = first.rowStep; topRows <= rows - second.rowStep; topRows += first.rowStep) {
+    const bottomRows = rows - topRows;
+    if (bottomRows % second.rowStep) continue;
+    const topSpan = topRows * first.rowHeight, bottomSpan = bottomRows * second.rowHeight;
+    positions.push({ topRows, bottomRows, topSpan, bottomSpan, span: topSpan + bottomSpan });
   }
+  return positions;
+}
+
+function repeatLayout(pattern, pitch, rows, secondPattern, position = 1) {
+  const first = latticeSpec(pattern, pitch);
+  if (!secondPattern) return { ...first, minRows: first.rowStep, span: rows * first.rowHeight };
+  const second = latticeSpec(secondPattern, pitch);
+  const positions = bandPositions(pattern, pitch, rows, secondPattern);
+  const selected = positions[Math.max(0, Math.min(positions.length - 1, position - 1))];
+  return { ...first, rowStep: first.rowStep === 2 && second.rowStep === 2 ? 2 : 1,
+    minRows: first.rowStep + second.rowStep, positions,
+    ...(selected ?? { span: NaN }) };
+}
+
+function syncBandPosition(layout, requested) {
+  const input = document.querySelector('#kumiko-split');
+  const maximum = layout.positions.length;
+  const position = Math.max(1, Math.min(maximum, requested));
+  input.max = String(maximum);
+  input.value = String(position);
+  input.disabled = maximum === 1;
+  const selected = layout.positions[position - 1];
+  input.setAttribute('aria-valuetext', `Position ${position} of ${maximum}: ${selected.topRows} top rows and ${selected.bottomRows} bottom rows`);
+  return position;
+}
+
+function sizingSettings() {
+  const second = document.querySelector('#kumiko-combine').checked
+    && document.querySelector('#kumiko-combination-layout').value === 'bands'
+    ? document.querySelector('#kumiko-second-pattern').value : undefined;
+  return { pattern: kumikoPattern.value, pitch: numericValue(document.querySelector('#kumiko-pitch')),
+    count: numericValue(document.querySelector('#kumiko-cell-count')),
+    rows: numericValue(document.querySelector('#kumiko-rows')),
+    frame: numericValue(document.querySelector('#kumiko-frame')),
+    strut: numericValue(document.querySelector('#kumiko-strut')), second,
+    position: numericValue(document.querySelector('#kumiko-split')) };
+}
+
+function nearestRepeatRows(settings, targetHeight) {
+  let best, error = Infinity;
+  for (let rows = 1; rows <= 200; rows++) {
+    const layout = repeatLayout(settings.pattern, settings.pitch, rows, settings.second, settings.position);
+    if (rows < layout.minRows || rows % layout.rowStep) continue;
+    const distance = Math.abs(2 * settings.frame - settings.strut + layout.span - targetHeight);
+    if (distance < error) { best = rows; error = distance; }
+  }
+  return best;
+}
+
+let dimensionsLinked = true;
+function fitPatternRows() {
+  const settings = sizingSettings();
+  const rows = nearestRepeatRows(settings, numericValue(document.querySelector('#kumiko-height')));
+  if (rows) document.querySelector('#kumiko-rows').value = String(rows);
+}
+
+function syncPatternSizing() {
+  const settings = sizingSettings();
+  const { pattern, pitch, count, frame, strut, second, position } = settings;
+  if (!Number.isFinite(pitch) || pitch < 1 || pitch > 500) throw new Error('Enter a cell size from 1 to 500 mm.');
+  if (!Number.isInteger(count) || count < 1 || count > 100) throw new Error('Enter a whole pattern cell count from 1 to 100.');
+  if (!Number.isFinite(frame) || frame < 1 || frame > 100 || !Number.isFinite(strut) || strut < 0.5 || strut > 20) {
+    throw new Error('Enter valid frame and lattice widths.');
+  }
+  if (second && (!Number.isInteger(position) || position < 1)) throw new Error('Choose a valid band position.');
+  const width = 2 * frame - strut + count * pitch;
+  if (dimensionsLinked) {
+    settings.rows = nearestRepeatRows(settings, width * (1 + Math.sqrt(5)) / 2);
+    document.querySelector('#kumiko-rows').value = String(settings.rows);
+  }
+  let layout = repeatLayout(pattern, pitch, settings.rows, second, position);
+  const rowInput = document.querySelector('#kumiko-rows');
+  rowInput.min = layout.minRows;
+  rowInput.step = layout.rowStep;
+  if (!Number.isInteger(settings.rows) || settings.rows < layout.minRows || settings.rows > 200 || settings.rows % layout.rowStep) {
+    throw new Error(`Enter ${layout.minRows}–200 rows in steps of ${layout.rowStep}.`);
+  }
+  if (second) {
+    const selected = syncBandPosition(layout, position);
+    layout = repeatLayout(pattern, pitch, settings.rows, second, selected);
+  }
+  const height = 2 * frame - strut + layout.span;
+  for (const prefix of ['kumiko', 'assembly']) {
+    document.querySelector(`#${prefix}-width`).value = String(width);
+    document.querySelector(`#${prefix}-height`).value = String(height);
+  }
+  return layout;
 }
 
 function readKerfs() {
@@ -302,13 +395,13 @@ function kumikoDrawing(options = {}) {
   const latticeWidth = innerWidth + strut, latticeHeight = innerHeight + strut;
   const latticeOrigin = frame - strut / 2;
   const pitch = latticeWidth / cellCount;
-  // Fit complete square rows, or an even number of triangular rows, to the
-  // exact opening. Rindō uses fewer rows to keep its fine intersections open.
-  const fittedRows = latticeHeight / (pitch * (diamond || shokko ? 1 : Math.sqrt(3)));
-  const rows = senbon ? 1 : squareGrid
-    ? Math.max(1, Math.round(latticeHeight / pitch))
-    : Math.max(2, 2 * (rindo || options.trianglePatterns?.includes('rindo') ? Math.floor(fittedRows) : Math.round(fittedRows)));
-  const rowHeight = latticeHeight / rows;
+  const lid = options.surface === 'top';
+  const lidRows = lid ? fittedLidRows(pattern, pitch, latticeHeight, options.trianglePatterns) : 0;
+  const rowHeight = senbon ? latticeHeight : lid ? latticeHeight / lidRows : latticeSpec(pattern, pitch).rowHeight;
+  // Only the lid fits its vertical pitch. Walls retain exact repeat geometry.
+  const rows = senbon ? 1 : lid ? lidRows : Math.max(1, Math.ceil(latticeHeight / rowHeight - 1e-9));
+  const originY = options.originY ?? latticeOrigin;
+  const firstRow = 0;
   const cellLimit = senbon ? cellCount : squareGrid
     ? rows * cellCount * (kakuasa ? 6 : masuTsunagi ? 9 : 1)
     : shokko
@@ -369,7 +462,7 @@ function kumikoDrawing(options = {}) {
   }
   function addTriangle(triangle, latticeCell = triangle) {
     const addMotifOpening = cell => addInfillOpening(cell, latticeCell);
-    const motif = options.trianglePattern?.(triangle, { pitch, rowHeight, latticeOrigin, rows, cellCount }) ?? pattern;
+    const motif = options.trianglePattern?.(triangle, { pitch, rowHeight, latticeOrigin, originY, rows, cellCount }) ?? pattern;
     const rindo = motif === 'rindo', sakura = motif === 'sakura', goma = motif === 'goma';
     const asanoha = motif === 'asanoha', tsumiishiKikko = motif === 'tsumiishi-kikko', kakuasa = motif === 'kakuasa';
     if (rindo) {
@@ -441,9 +534,9 @@ function kumikoDrawing(options = {}) {
     });
   }
   if (squareGrid) {
-    for (let row = 0; row < rows; row++) {
+    for (let row = firstRow; row <= rows; row++) {
       for (let column = 0; column < cellCount; column++) {
-        const x = latticeOrigin + column * pitch, y = latticeOrigin + row * rowHeight;
+        const x = latticeOrigin + column * pitch, y = originY + row * rowHeight;
         const a = [x, y], b = [x + pitch, y], c = [x + pitch, y + rowHeight], d = [x, y + rowHeight];
         if (kakuasa) {
           // Alternating diagonals let the leaf spokes meet at grid vertices.
@@ -469,7 +562,7 @@ function kumikoDrawing(options = {}) {
     for (let row = -1; row <= rows; row++) {
       for (let column = -1; column <= cellCount; column++) {
         const x = latticeOrigin + column * pitch + ((row % 2 + 2) % 2) * pitch / 2;
-        const y = latticeOrigin + row * rowHeight;
+        const y = originY + row * rowHeight;
         addOpening([[-0.5, 0], [-0.25, -0.5], [0.25, -0.5], [0.5, 0], [0.25, 0.5], [-0.25, 0.5]]
           .map(([u, v]) => [x + u * pitch, y + v * rowHeight]));
         addOpening([[x + pitch / 2, y], [x + 3 * pitch / 4, y + rowHeight / 2], [x + pitch / 4, y + rowHeight / 2]]);
@@ -491,7 +584,7 @@ function kumikoDrawing(options = {}) {
     // Two center spacings make one complete repeat; even counts keep the
     // opposite frame edges on matching symmetry axes.
     const radius = 1 / Math.sqrt(2), corner = 1 - radius;
-    for (let row = 0; row <= rows; row++) {
+    for (let row = firstRow; row <= rows; row++) {
       for (let column = 0; column <= 2 * cellCount; column++) {
         const quarter = (row + column) % 2 === 0
           ? [[0, 0], [radius, 0], [radius, corner], [corner, radius], [0, radius]]
@@ -500,16 +593,16 @@ function kumikoDrawing(options = {}) {
           addOpening(quarter.map(point => {
             let [x, y] = point;
             for (let rotation = 0; rotation < turn; rotation++) [x, y] = [-y, x];
-            return [latticeOrigin + (column + x) * pitch / 2, latticeOrigin + (row + y) * rowHeight];
+            return [latticeOrigin + (column + x) * pitch / 2, originY + (row + y) * rowHeight];
           }), quarter.map((_, i) => i === 0 || i === quarter.length - 1 ? strut : infillStrut));
         }
       }
     }
   } else {
-    for (let row = 0; row < rows + (diamond ? 1 : 0); row++) {
+    for (let row = firstRow; row <= rows + (diamond ? 1 : 0); row++) {
       for (let column = -1; column <= cellCount; column++) {
-        const x = latticeOrigin + column * pitch + (row % 2) * pitch / 2;
-        const y = latticeOrigin + row * rowHeight;
+        const x = latticeOrigin + column * pitch + ((row % 2 + 2) % 2) * pitch / 2;
+        const y = originY + row * rowHeight;
         if (diamond) {
           addOpening([[x, y - rowHeight], [x + pitch / 2, y], [x, y + rowHeight], [x - pitch / 2, y]]);
           continue;
@@ -523,7 +616,7 @@ function kumikoDrawing(options = {}) {
   const outer = outlinePath([[0, 0], [width, 0], [width, height], [0, height]], 0, 0);
   const name = patternDetails[pattern].name;
   const rounded = value => number(Number(value.toFixed(3)));
-  return { width, height, openingPolygons, patternName: name,
+  return { width, height, openingPolygons, patternName: name, grid: { pitch, rowHeight, originX: latticeOrigin, originY, rows },
     cellDimensions: senbon
       ? `Cell: ${rounded(pitch)} mm wide · ${rounded(latticeHeight)} mm tall`
       : squareGrid || kagome
@@ -547,27 +640,38 @@ function combinedPatternDrawing(options) {
   const first = kumikoDrawing({ ...options, combine: false });
   const secondPattern = document.querySelector('#kumiko-second-pattern').value;
   if (!patternDetails[secondPattern]) throw new Error('Choose a bottom pattern.');
-  const second = kumikoDrawing({ ...options, pattern: secondPattern, combine: false });
-  const share = numericValue(document.querySelector('#kumiko-split'));
-  if (!Number.isFinite(share) || share < 20 || share > 80) throw new Error('Enter a top band share from 20 to 80%.');
+  const position = numericValue(document.querySelector('#kumiko-split'));
+  if (!Number.isInteger(position) || position < 1) throw new Error('Choose a valid band position.');
   const frame = options.frame ?? numericValue(document.querySelector('#kumiko-frame'));
   const rail = options.strut ?? numericValue(document.querySelector('#kumiko-strut'));
-  const split = frame + (first.height - 2 * frame) * share / 100;
-  const bands = [first, second].map((drawing, index) => drawing.openingPolygons.flatMap(points => {
-    const clipped = clipPolygon(points, point => index === 0 ? split - rail / 2 - point[1] : point[1] - split - rail / 2);
-    return clipped.length >= 3 && polygonArea(clipped) > 0.01 ? [clipped] : [];
-  }));
+  const span = first.height - 2 * frame + rail;
+  const settings = { pattern: kumikoPattern.value, pitch: first.grid.pitch, frame, strut: rail, second: secondPattern, position };
+  const requestedRows = numericValue(document.querySelector('#kumiko-rows'));
+  const requested = repeatLayout(settings.pattern, settings.pitch, requestedRows, secondPattern, position);
+  const repeats = Math.abs(requested.span - span) < 1e-7 ? requested
+    : repeatLayout(settings.pattern, settings.pitch, nearestRepeatRows(settings, first.height), secondPattern, position);
+  if (position > repeats.positions.length) throw new Error('Choose a valid band position.');
+  const topSpan = repeats.topSpan;
+  const bottomSpan = span - topSpan;
+  if (bottomSpan <= 0) throw new Error('Use more rows to fit both pattern bands.');
+  const top = kumikoDrawing({ ...options, panelWidth: first.width, panelHeight: topSpan + 2 * frame - rail,
+    combine: false, surface: 'band' });
+  const second = kumikoDrawing({ ...options, panelWidth: first.width, panelHeight: bottomSpan + 2 * frame - rail,
+    pattern: secondPattern, combine: false, surface: 'band' });
+  const split = frame - rail / 2 + topSpan;
+  const actualShare = topSpan / span * 100;
+  const bands = [top.openingPolygons, second.openingPolygons.map(points => points.map(([x, y]) => [x, y + topSpan]))];
   if (bands.some(band => !band.length)) throw new Error('Both pattern bands need openings. Adjust the split, frame, lattice width, or panel size.');
   const openingPolygons = bands.flat();
   const openings = openingPolygons.map(points => outlinePath(points, 0, 0));
   const outer = outlinePath([[0, 0], [first.width, 0], [first.width, first.height], [0, first.height]], 0, 0);
   const name = `${first.patternName} + ${second.patternName}`;
-  return { ...first, openingPolygons, patternName: name, combination: { layout: 'bands', split, rail, share },
-    cellDimensions: `Two bands · ${number(share)}% top · ${number(rail)} mm divider`,
+  return { ...first, openingPolygons, patternName: name, combination: { layout: 'bands', split, rail, position, actualShare },
+    cellDimensions: `Two bands · ${Number(actualShare.toFixed(1))}% top · ${number(rail)} mm divider`,
     content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(path => `<path d="${path}" />`).join('')}</g></g>`,
     preview: `<path d="${outer} ${openings.join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`,
-    filename: `kumiko-${kumikoPattern.value}-${secondPattern}-${number(share)}pct-${number(first.width)}x${number(first.height)}mm.svg`,
-    label: `${name} combined panel, ${number(first.width)} by ${number(first.height)} millimeters. Top band ${number(share)} percent, with a ${number(rail)} millimeter solid divider. ${openings.length} cutouts.`,
+    filename: `kumiko-${kumikoPattern.value}-${secondPattern}-position-${position}-${number(first.width)}x${number(first.height)}mm.svg`,
+    label: `${name} combined panel, ${number(first.width)} by ${number(first.height)} millimeters. Top band ${Number(actualShare.toFixed(1))} percent, with a ${number(rail)} millimeter solid divider. ${openings.length} cutouts.`,
     hint: `${openings.length} closed cutouts + outer frame · two pattern bands · millimeter units` };
 }
 
@@ -614,19 +718,17 @@ function sharedCellPatternDrawing(options, layout) {
     const strut = numericValue(document.querySelector('#kumiko-strut'));
     const span = options.wrap.width - 2 * frame + strut;
     const count = (options.cellCount ?? numericValue(document.querySelector('#kumiko-cell-count'))) * span / (width - 2 * frame + strut);
-    const fittedRows = span / (span / count * Math.sqrt(3));
-    const rows = Math.max(2, 2 * ([background, accent].includes('rindo') ? Math.floor(fittedRows) : Math.round(fittedRows)));
-    options = { ...options, wrap: { ...options.wrap, span, origin: frame - strut / 2, frame, lidRowHeight: span / rows } };
+    options = { ...options, wrap: { ...options.wrap, span, origin: frame - strut / 2, frame, lidRowHeight: span / fittedLidRows('triangular', span / count, span, [background, accent]) } };
   }
   let centers;
   const counts = { background: 0, accent: 0 };
   const drawing = kumikoDrawing({ ...options, pattern: 'triangular', combine: false, trianglePatterns: [background, accent],
     trianglePattern(triangle, grid) {
       centers ??= [[0.34, 0.24], [0.66, 0.5], [0.34, 0.76]].map(([u, v]) => {
-        const row = Math.max(1, Math.min(grid.rows - 1, Math.round((height * v - grid.latticeOrigin) / grid.rowHeight)));
+        const row = Math.max(1, Math.min(grid.rows - 1, Math.round((height * v - grid.originY) / grid.rowHeight)));
         const shift = (row % 2) * grid.pitch / 2;
         const column = Math.max(0, Math.min(grid.cellCount, Math.round((width * u - grid.latticeOrigin - shift) / grid.pitch)));
-        return [grid.latticeOrigin + column * grid.pitch + shift, grid.latticeOrigin + row * grid.rowHeight];
+        return [grid.latticeOrigin + column * grid.pitch + shift, grid.originY + row * grid.rowHeight];
       });
       const center = [0, 1].map(axis => triangle.reduce((sum, point) => sum + point[axis], 0) / 3);
       const useAccent = layout === 'islands'
@@ -883,7 +985,7 @@ function assemblyDrawing() {
       : 'Joint depth shown at actual size. SVG uses exact dimensions.',
     preview: panels.map(panel => `<text x="${number(panel.x)}" y="${number(panel.y - labelSpace / 4)}" fill="#202f61" stroke="none" font-family="monospace" font-size="${number(labelSpace * 0.65)}">${panel.name.toUpperCase()}</text><path d="${panel.previewPath} ${panel.openings.map(opening => opening.path).join(' ')} ${panel.windows.map(window => window.path).join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`).join(''),
     joints: `${fingers} front/back fingers · ${fingers - 1} left/right and top fingers per edge · ${number(Number(pitch.toFixed(3)))} mm vertical segments · ${number(Number(topPitch.toFixed(3)))} mm top segments · ${number(thickness)} mm joint depth · Bottom: ${bottomFingers} fingers per edge, ${number(Number(bottomPitch.toFixed(3)))} mm wide, ${number(bottomOffset)} mm under / ${number(bottomOver)} mm over · ${number(cordDiameter)} mm cord notch`,
-    filename: `assembly-${kumikoPattern.value}${pattern.combination ? `-${document.querySelector('#kumiko-second-pattern').value}-${pattern.combination.layout === 'bands' ? `${number(pattern.combination.share)}pct` : pattern.combination.layout}` : ''}-${number(panelWidth)}x${number(totalHeight)}mm-total-${number(legHeight)}mm-legs-${number(thickness)}mm-material.svg`,
+    filename: `assembly-${kumikoPattern.value}${pattern.combination ? `-${document.querySelector('#kumiko-second-pattern').value}-${pattern.combination.layout === 'bands' ? `position-${pattern.combination.position}` : pattern.combination.layout}` : ''}-${number(panelWidth)}x${number(totalHeight)}mm-total-${number(legHeight)}mm-legs-${number(thickness)}mm-material.svg`,
     description: `Box: ${number(panelWidth)} × ${number(panelWidth)} × ${number(totalHeight)} mm (including legs)`,
     label: `${panels.length} box panels: ${panelNames.join(', ')}. ${pattern.patternName} pattern with ${wallOpeningCount} cutouts across the side walls and ${topOpenings.length} in the top.${wrapInterlocking ? ' The river continues around Front, Right, Back, Left and closes at the front seam.' : ''} Bottom fingers fit ${4 * bottomFingers} closed wall windows. A ${number(cordDiameter)} millimeter cord notch opens from the center of one bottom edge. Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall. Outside size ${panelWidth} by ${panelWidth} by ${totalHeight} millimeters including legs. Pattern panel height ${panelHeight} millimeters. Wall body height ${bodyHeight} millimeters.`,
     hint: `${panels.length} panel outlines + ${wallOpeningCount + topOpenings.length} pattern cutouts + ${4 * bottomFingers} windows · kerf compensated · millimeter units` };
@@ -1041,6 +1143,7 @@ document.querySelector('#box-lamp').addEventListener('change', event => {
 function updatePreview() {
   document.querySelector('#kumiko-pattern-description').textContent = patternDetails[kumikoPattern.value].description;
   try {
+    if (mode !== 'material') syncPatternSizing();
     if (mode === 'material') {
       currentDrawing = kerfDrawing(readKerfs());
     } else if (mode === 'kumiko') {
@@ -1101,6 +1204,11 @@ function updatePreview() {
   const cellCount = numericValue(document.querySelector('#kumiko-cell-count'));
   document.querySelector('#kumiko-decrease').disabled = !Number.isInteger(cellCount) || cellCount <= 1 || cellCount > 100;
   document.querySelector('#kumiko-increase').disabled = !Number.isInteger(cellCount) || cellCount < 1 || cellCount >= 100;
+  const rowInput = document.querySelector('#kumiko-rows');
+  const rows = numericValue(rowInput), step = Number(rowInput.step);
+  document.querySelector('#kumiko-rows-decrease').disabled = !Number.isInteger(rows) || rows - step < Number(rowInput.min);
+  document.querySelector('#kumiko-rows-increase').disabled = !Number.isInteger(rows) || rows + step > 200;
+
 }
 
 function setMode(nextMode) {
@@ -1370,7 +1478,7 @@ const linkedDimensionInputs = ['kumiko', 'assembly'].flatMap(generator =>
   ['width', 'height'].map(dimension => document.querySelector(`#${generator}-${dimension}`))
 );
 [...kerfInputs, ...kumikoInputs, ...assemblyInputs, ...bottomInputs, ...legInputs]
-  .filter(input => !linkedDimensionInputs.includes(input))
+  .filter(input => !linkedDimensionInputs.includes(input) && input.id !== 'kumiko-rows')
   .forEach(input => input.addEventListener('input', updatePreview));
 const bottomFingerButtons = [...document.querySelectorAll('[data-bottom-fingers]')];
 bottomFingerButtons.forEach(button => button.addEventListener('click', () => {
@@ -1389,7 +1497,7 @@ const secondPatternPicker = new PatternPicker(secondPatternSelect, value => {
   const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, infillStrut: 1, frame: 2 });
   return `<svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">${drawing.preview}</svg>`;
 });
-secondPatternSelect.addEventListener('change', () => { secondPatternPicker.sync(); syncInfillControls(); updatePreview(); });
+secondPatternSelect.addEventListener('change', () => { secondPatternPicker.sync(); syncInfillControls(); fitPatternRows(); updatePreview(); });
 let bandPatternPair = null;
 let previousCombinationLayout = 'bands';
 function syncCombinationControls() {
@@ -1398,7 +1506,7 @@ function syncCombinationControls() {
   if (previousCombinationLayout === 'bands' && layout !== 'bands') bandPatternPair = [kumikoPattern.value, secondPatternSelect.value];
   if (previousCombinationLayout !== 'bands' && layout === 'bands' && bandPatternPair) {
     [kumikoPattern.value, secondPatternSelect.value] = bandPatternPair;
-    adjustPatternCellCount();
+    fitPatternRows();
   }
   previousCombinationLayout = layout;
   const shared = enabled && layout !== 'bands';
@@ -1406,13 +1514,14 @@ function syncCombinationControls() {
   document.querySelector('#kumiko-band-share').hidden = layout !== 'bands';
   document.querySelector('label[for="kumiko-second-pattern-trigger"]').textContent = layout === 'bands' ? 'Bottom pattern' : 'Accent pattern';
   document.querySelector('label[for="kumiko-pattern-trigger"]').textContent = shared ? 'Background pattern' : 'Pattern';
-  if (shared && !sharedCellPatterns.includes(kumikoPattern.value)) { kumikoPattern.value = 'triangular'; adjustPatternCellCount(); }
+  if (shared && !sharedCellPatterns.includes(kumikoPattern.value)) { kumikoPattern.value = 'triangular'; fitPatternRows(); }
   if (shared && !sharedCellPatterns.includes(secondPatternSelect.value)) secondPatternSelect.value = 'asanoha';
   patternPicker.setAllowedValues(shared ? sharedCellPatterns : null);
   secondPatternPicker.setAllowedValues(shared ? sharedCellPatterns : null);
   patternPicker.sync();
   secondPatternPicker.sync();
   syncInfillControls();
+  fitPatternRows();
   document.querySelector('#kumiko-combine-help').textContent = layout === 'bands'
     ? 'Two bands share a frame and a solid divider matching the lattice width. Walls use both patterns; the top panel uses only the top pattern.'
     : layout === 'interlock'
@@ -1421,69 +1530,48 @@ function syncCombinationControls() {
 }
 document.querySelector('#kumiko-combine').addEventListener('change', () => { syncCombinationControls(); updatePreview(); });
 document.querySelector('#kumiko-combination-layout').addEventListener('change', () => { syncCombinationControls(); updatePreview(); });
-document.querySelector('#kumiko-split').addEventListener('input', updatePreview);
+document.querySelector('#kumiko-split').addEventListener('input', () => {
+  // Keep the row count and slider range fixed while moving the divider.
+  dimensionsLinked = false;
+  syncRatioControl();
+  updatePreview();
+});
 kumikoPattern.addEventListener('change', () => {
   patternPicker.sync();
-  adjustPatternCellCount();
+  fitPatternRows();
   syncInfillControls();
   updatePreview();
 });
-const goldenRatio = (1 + Math.sqrt(5)) / 2;
-let dimensionAnchor = 'width';
-let dimensionsLinked = true;
-function syncPanelDimensions(generator) {
-  const other = generator === 'kumiko' ? 'assembly' : 'kumiko';
-  ['width', 'height'].forEach(dimension => {
-    document.querySelector(`#${other}-${dimension}`).value = document.querySelector(`#${generator}-${dimension}`).value;
-  });
+function syncRatioControl() {
+  const button = document.querySelector('#kumiko-golden-ratio');
+  button.setAttribute('aria-pressed', String(dimensionsLinked));
+  document.querySelector('#kumiko-dimensions').setAttribute('data-linked', String(dimensionsLinked));
+  button.title = dimensionsLinked ? 'Stop choosing rows near the golden ratio' : 'Choose whole rows nearest the golden ratio';
 }
-function applyPanelRatio(generator) {
-  const source = numericValue(document.querySelector(`#${generator}-${dimensionAnchor}`));
-  const target = document.querySelector(`#${generator}-${dimensionAnchor === 'width' ? 'height' : 'width'}`);
-  // Incomplete edits propagate too, so switching tabs cannot export stale sizes.
-  target.value = Number.isFinite(source) && source > 0
-    ? String(Math.round(dimensionAnchor === 'width' ? source * goldenRatio : source / goldenRatio))
-    : '';
-}
-['kumiko'].forEach(generator => {
-  ['width', 'height'].forEach(dimension => {
-    document.querySelector(`#${generator}-${dimension}`).addEventListener('input', () => {
-      dimensionAnchor = dimension;
-      if (dimensionsLinked) applyPanelRatio(generator);
-      syncPanelDimensions(generator);
+document.querySelector('#kumiko-golden-ratio').addEventListener('click', () => {
+  dimensionsLinked = !dimensionsLinked;
+  syncRatioControl();
+  updatePreview();
+});
+document.querySelector('#kumiko-rows').addEventListener('input', () => {
+  dimensionsLinked = false;
+  syncRatioControl();
+  updatePreview();
+});
+for (const [field, limit] of [['cell-count', 100], ['rows', 200]]) {
+  for (const [direction, delta] of [['decrease', -1], ['increase', 1]]) {
+    const id = field === 'cell-count' ? `kumiko-${direction}` : `kumiko-rows-${direction}`;
+    document.querySelector(`#${id}`).addEventListener('click', () => {
+      const input = document.querySelector(`#kumiko-${field}`);
+      const step = field === 'rows' ? Number(input.step) : 1;
+      const next = numericValue(input) + delta * step;
+      if (!Number.isInteger(next) || next < Number(input.min) || next > limit) return;
+      input.value = String(next);
+      if (field === 'rows') { dimensionsLinked = false; syncRatioControl(); }
       updatePreview();
     });
-  });
-  document.querySelector(`#${generator}-golden-ratio`).addEventListener('click', () => {
-    if (!dimensionsLinked) {
-      const source = numericValue(document.querySelector(`#${generator}-${dimensionAnchor}`));
-      if (!Number.isFinite(source) || source <= 0) {
-        error.textContent = `Enter a valid ${dimensionAnchor} before linking the dimensions.`;
-        return;
-      }
-      applyPanelRatio(generator);
-      syncPanelDimensions(generator);
-    }
-    dimensionsLinked = !dimensionsLinked;
-    ['kumiko'].forEach(view => {
-      const button = document.querySelector(`#${view}-golden-ratio`);
-      button.setAttribute('aria-pressed', String(dimensionsLinked));
-      document.querySelector(`#${view}-dimensions`).setAttribute('data-linked', String(dimensionsLinked));
-      button.title = dimensionsLinked ? 'Unlink dimensions' : 'Link dimensions: height = width × 1.618';
-    });
-    updatePreview();
-  });
-});
-syncPanelDimensions('kumiko');
-[['decrease', -1], ['increase', 1]].forEach(([direction, delta]) => {
-  document.querySelector(`#kumiko-${direction}`).addEventListener('click', () => {
-    const input = document.querySelector('#kumiko-cell-count');
-    const next = numericValue(input) + delta;
-    if (!Number.isInteger(next) || next < 1 || next > 100) return;
-    input.value = String(next);
-    updatePreview();
-  });
-});
+  }
+}
 document.querySelectorAll('button[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
 downloadButton.addEventListener('click', () => {
   if (!currentDrawing) return;
@@ -1507,4 +1595,5 @@ try {
   // Use the default tab when local storage is unavailable.
 }
 syncInfillControls();
+syncRatioControl();
 setMode(initialMode);

@@ -8,7 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="styles.css?v=13" />
     <script src="pattern-picker.js?v=2" defer></script>
-    <script src="app.js?v=71" defer></script>
+    <script src="app.js?v=78" defer></script>
   </head>
   <body>
     <main>
@@ -143,31 +143,37 @@
                 <label for="kumiko-second-pattern">Bottom pattern</label>
                 <select id="kumiko-second-pattern" class="material-select" aria-describedby="kumiko-combine-help"></select>
                 <div id="kumiko-band-share">
-                <label for="kumiko-split">Top band share</label>
-                <div class="input-wrap"><input id="kumiko-split" type="number" min="20" max="80" step="1" value="50" aria-describedby="kumiko-combine-help size-error" /><span>%</span></div>
+                <label for="kumiko-split">Band position</label>
+                <div class="input-wrap"><input id="kumiko-split" type="number" min="1" max="7" step="1" value="4" aria-describedby="kumiko-combine-help size-error" /></div>
                 </div>
                 <p id="kumiko-combine-help" class="hint">The main pattern fills the top band. Both bands share cell count, lattice width, and frame. A solid divider matching the lattice width joins them. Walls use both patterns; the top panel uses only the top pattern.</p>
               </div>
             </fieldset>
+            <input id="kumiko-width" type="hidden" value="150" />
+            <input id="kumiko-height" type="hidden" value="231.6" />
+            <label for="kumiko-pitch">Cell size</label>
+            <div class="input-wrap"><input id="kumiko-pitch" type="number" min="1" max="500" step="0.1" value="27.2" aria-describedby="size-error" /><span>mm</span></div>
             <div id="kumiko-dimensions" class="dimension-pair" data-linked="true">
               <div class="dimension-fields">
-                <label for="kumiko-width">Panel width</label>
-                <div class="input-wrap"><input id="kumiko-width" type="number" min="10" max="1000" step="any" value="150" aria-describedby="size-error" /><span>mm</span></div>
-                <label for="kumiko-height">Panel height</label>
-                <div class="input-wrap"><input id="kumiko-height" type="number" min="10" max="1000" step="any" value="243" aria-describedby="size-error" /><span>mm</span></div>
+                <label for="kumiko-cell-count">Cells across width</label>
+                <div class="input-wrap pattern-stepper">
+                  <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions size-error" />
+                  <span>cells</span>
+                  <button id="kumiko-decrease" type="button" aria-label="Decrease pattern cell count" title="One fewer pattern cell">−</button>
+                  <button id="kumiko-increase" type="button" aria-label="Increase pattern cell count" title="One more pattern cell">+</button>
+                </div>
+                <label for="kumiko-rows">Rows high</label>
+                <div class="input-wrap pattern-stepper">
+                  <input id="kumiko-rows" type="number" min="2" max="200" step="2" value="16" aria-describedby="size-error" />
+                  <button id="kumiko-rows-decrease" type="button" aria-label="Decrease row count" title="One fewer row repeat">−</button>
+                  <button id="kumiko-rows-increase" type="button" aria-label="Increase row count" title="One more row repeat">+</button>
+                </div>
               </div>
               <div class="dimension-link">
                 <button id="kumiko-golden-ratio" class="ratio-button" type="button" aria-label="Maintain golden ratio" aria-pressed="true" title="Unlink dimensions">φ</button>
               </div>
             </div>
             <p class="hint">Panel dimensions and pattern are shared with Assembly.</p>
-            <label for="kumiko-cell-count">Cells across width</label>
-            <div class="input-wrap pattern-stepper">
-              <input id="kumiko-cell-count" type="number" min="1" max="100" step="1" value="5" aria-describedby="kumiko-cell-dimensions size-error" />
-              <span>cells</span>
-              <button id="kumiko-decrease" type="button" aria-label="Decrease pattern cell count" title="One fewer pattern cell">−</button>
-              <button id="kumiko-increase" type="button" aria-label="Increase pattern cell count" title="One more pattern cell">+</button>
-            </div>
             <p id="kumiko-cell-dimensions" class="hint" aria-live="polite"></p>
             <label for="kumiko-strut">Lattice width</label>
             <div class="input-wrap"><input id="kumiko-strut" type="number" min="0.5" max="20" step="any" value="2" aria-describedby="size-error" /><span>mm</span></div>
@@ -186,7 +192,7 @@
               <select id="assembly-material" class="material-select"></select>
             </div>
             <input id="assembly-width" type="hidden" value="150" />
-            <input id="assembly-height" type="hidden" value="243" />
+            <input id="assembly-height" type="hidden" value="231.6" />
             <input id="assembly-thickness" type="hidden" value="3" />
             <input id="assembly-kerf" type="hidden" value="0.1" />
             <dl aria-label="Dimensions" aria-live="polite">

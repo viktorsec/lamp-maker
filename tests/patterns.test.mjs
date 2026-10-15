@@ -16,7 +16,11 @@ function generators(pattern = 'goma') {
   inputs.set('#kumiko-combine', { checked: false });
   inputs.set('#kumiko-second-pattern', { value: 'asanoha' });
   inputs.set('#kumiko-combination-layout', { value: 'bands' });
-  const context = vm.createContext({ document: { querySelector: selector => inputs.get(selector) ?? {} } });
+  for (const input of inputs.values()) input.setAttribute = function(name, value) { this[name] = value; };
+  const context = vm.createContext({ document: { querySelector: selector => {
+    if (!inputs.has(selector)) inputs.set(selector, { style: {}, setAttribute(name, value) { this[name] = value; } });
+    return inputs.get(selector);
+  } } });
   vm.runInContext(source.slice(0, source.indexOf('function matingPath(')), context);
   return { context, set: (id, value) => {
     const input = inputs.get(`#${id}`);
@@ -25,28 +29,184 @@ function generators(pattern = 'goma') {
   } };
 }
 
-test('simple patterns boost cells once and restore the original count without rounding drift', () => {
-  const { context, set } = generators('diamond');
-  for (const count of [1, 5, 6, 67, 99, 100]) {
-    set('kumiko-cell-count', count);
-    for (const pattern of ['senbon', 'masu', 'senbon', 'diamond', 'masu', 'goma']) {
-      vm.runInContext(`kumikoPattern.value = '${pattern}'; adjustPatternCellCount();`, context);
-      const actual = vm.runInContext("numericValue(document.querySelector('#kumiko-cell-count'))", context);
-      assert.equal(actual, ['senbon', 'masu'].includes(pattern) ? Math.min(100, Math.ceil(count * 1.5)) : count);
+test('exact sizing derives panel dimensions from cell size and complete row repeats', () => {
+  for (const pattern of ['triangular', 'asanoha', 'goma', 'sakura', 'rindo', 'kagome', 'tsumiishi-kikko',
+    'kakuasa', 'masu', 'masu-tsunagi', 'shokko', 'diamond', 'senbon']) {
+    const { context, set } = generators(pattern);
+    vm.runInContext('dimensionsLinked = false', context);
+    set('kumiko-rows', 8);
+    const layout = context.syncPatternSizing();
+    const drawing = context.kumikoDrawing();
+    assert.ok(Math.abs(drawing.width - 150) < 1e-8);
+    assert.ok(Math.abs(drawing.height - (14 + 8 * layout.rowHeight)) < 1e-8);
+    assert.ok(Math.abs((drawing.height - 14) / layout.rowHeight - 8) < 1e-8);
+    assert.equal(drawing.width, Number(context.document.querySelector('#assembly-width').value));
+    assert.equal(drawing.height, Number(context.document.querySelector('#assembly-height').value));
+    assert.equal(context.document.querySelector('#kumiko-cell-count').value, '5');
+    assert.doesNotMatch(context.generateSvg(drawing), /NaN|Infinity/);
+  }
+});
+
+test('golden ratio chooses the nearest whole repeat and manual rows reject incomplete values', () => {
+  const { context, set } = generators('asanoha');
+  context.syncPatternSizing();
+  assert.equal(context.document.querySelector('#kumiko-rows').value, '10');
+  assert.ok(Math.abs(Number(context.document.querySelector('#kumiko-height').value) - 249.5589098293673) < 1e-8);
+  vm.runInContext('dimensionsLinked = false', context);
+  for (const rows of ['', 0, 3, 201]) {
+    set('kumiko-rows', rows);
+    assert.throws(() => context.syncPatternSizing(), /rows/);
+  }
+  set('kumiko-rows', 12);
+  context.syncPatternSizing();
+  assert.equal(context.document.querySelector('#kumiko-rows').value, '12');
+});
+
+test('triangular wall motifs retain equilateral cells, including Rindo', () => {
+  for (const pattern of ['triangular', 'asanoha', 'goma', 'sakura', 'rindo', 'tsumiishi-kikko']) {
+    const { context } = generators(pattern);
+    for (const [width, height, surface] of [[150, 243, 'wall'], [150, 150, 'wall'], [213, 105, 'wall']]) {
+      let count = 0;
+      const drawing = context.kumikoDrawing({ pattern, panelWidth: width, panelHeight: height, surface,
+        trianglePattern(triangle) {
+          const sides = triangle.map((a, i) => Math.hypot(a[0] - triangle[(i + 1) % 3][0], a[1] - triangle[(i + 1) % 3][1]));
+          assert.ok(Math.max(...sides) - Math.min(...sides) < 1e-8, pattern);
+          count++;
+          return 'triangular';
+        } });
+      assert.ok(count > 0);
+      assert.ok(Math.abs(drawing.grid.rowHeight / drawing.grid.pitch - Math.sqrt(3) / 2) < 1e-10);
     }
   }
 });
 
-test('leaving simple patterns scales manual density edits back and preserves incomplete input', () => {
-  const { context, set } = generators('diamond');
-  vm.runInContext("kumikoPattern.value = 'senbon'; adjustPatternCellCount();", context);
-  set('kumiko-cell-count', 12);
-  vm.runInContext("kumikoPattern.value = 'goma'; adjustPatternCellCount();", context);
-  assert.equal(vm.runInContext("numericValue(document.querySelector('#kumiko-cell-count'))", context), 8);
-  vm.runInContext("kumikoPattern.value = 'masu'; adjustPatternCellCount();", context);
-  set('kumiko-cell-count', '');
-  vm.runInContext("kumikoPattern.value = 'diamond'; adjustPatternCellCount();", context);
-  assert.equal(vm.runInContext("document.querySelector('#kumiko-cell-count').value", context), '');
+test('square lid uses the original uniform row fitting while square cells remain unchanged', () => {
+  const { context } = generators('triangular');
+  const canonical = polygons => Array.from(polygons, points => Array.from(points, ([x, y]) => `${x.toFixed(5)},${y.toFixed(5)}`).sort().join(';')).sort();
+  for (const cellCount of [3, 4, 5, 6]) {
+    const drawing = context.kumikoDrawing({ panelWidth: 150, panelHeight: 150, cellCount, surface: 'top' });
+    const reflected = drawing.openingPolygons.map(points => points.map(([x, y]) => [x, 150 - y]));
+    assert.deepEqual(canonical(drawing.openingPolygons), canonical(reflected));
+    assert.ok(Math.abs(drawing.grid.rowHeight * drawing.grid.rows - 136) < 1e-8);
+    assert.equal(drawing.grid.rows % 2, 0);
+  }
+  const square = context.kumikoDrawing({ pattern: 'masu', panelWidth: 150, panelHeight: 150, cellCount: 5, surface: 'top' });
+  assert.equal(square.openingPolygons.length, 25, 'Square grids need no half-cell cropping on a square lid');
+});
+
+test('lid restores the original repeat counts and keeps every base triangle uniform', () => {
+  for (const [cellCount, expectedRows, rindoRows] of [[3, 4, 2], [4, 4, 4], [5, 6, 4], [6, 6, 6], [9, 10, 10]]) {
+    const { context } = generators('asanoha');
+    let firstSides;
+    const lid = context.kumikoDrawing({ panelWidth: 150, panelHeight: 150, cellCount, surface: 'top',
+      trianglePattern(triangle) {
+        const sides = Array.from(triangle, (a, i) => Math.hypot(a[0] - triangle[(i + 1) % 3][0], a[1] - triangle[(i + 1) % 3][1])).sort((a, b) => a - b);
+        firstSides ??= sides;
+        assert.ok(sides.every((length, i) => Math.abs(length - firstSides[i]) < 1e-8), 'The lid must not introduce special edge or transition cells');
+        return 'triangular';
+      } });
+    assert.equal(lid.grid.rows, expectedRows);
+    assert.equal(lid.grid.originY, 7);
+    assert.ok(Math.abs(lid.grid.rowHeight * expectedRows - 136) < 1e-8);
+    const rindo = context.kumikoDrawing({ pattern: 'rindo', panelWidth: 150, panelHeight: 150, cellCount, strut: 0.5, infillStrut: 0.5, surface: 'top' });
+    assert.equal(rindo.grid.rows, rindoRows);
+    const wall = context.kumikoDrawing({ panelWidth: 150, panelHeight: 250, cellCount });
+    assert.ok(Math.abs(wall.grid.rowHeight - wall.grid.pitch * Math.sqrt(3) / 2) < 1e-8);
+  }
+});
+
+test('lid combinations keep their motifs on the same fitted grid', () => {
+  for (const layout of ['islands', 'interlock']) {
+    const { context, set } = generators('asanoha');
+    set('kumiko-combine', true);
+    set('kumiko-second-pattern', 'rindo');
+    set('kumiko-combination-layout', layout);
+    const options = { panelWidth: 150, panelHeight: 150, surface: 'top' };
+    const combined = context.kumikoDrawing(options);
+    const plain = context.kumikoDrawing({ ...options, pattern: 'triangular', combine: false, trianglePatterns: ['asanoha', 'rindo'] });
+    assert.deepEqual(combined.grid, plain.grid);
+    assert.ok(combined.combination.counts.background > 0 && combined.combination.counts.accent > 0);
+    assert.doesNotMatch(context.generateSvg(combined), /NaN|Infinity/);
+  }
+});
+
+test('snapped mixed bands use complete repeats at both frame edges and the divider', () => {
+  for (const [first, second] of [['asanoha', 'goma'], ['diamond', 'asanoha'], ['kakuasa', 'sakura'], ['senbon', 'masu'], ['shokko', 'masu'], ['masu', 'shokko']]) {
+    for (const position of [1, 2, 3]) {
+      const { context, set } = generators(first);
+      set('kumiko-combine', true);
+      set('kumiko-second-pattern', second);
+      set('kumiko-split', position);
+      const layout = context.syncPatternSizing();
+      const drawing = context.kumikoDrawing();
+      assert.ok(Math.abs(drawing.height - 14 - layout.topSpan - layout.bottomSpan) < 1e-8);
+      assert.ok(Math.abs(drawing.combination.split - 7 - layout.topSpan) < 1e-8);
+      assert.equal(layout.topRows % context.latticeSpec(first, 27.2).rowStep, 0);
+      assert.equal(layout.bottomRows % context.latticeSpec(second, 27.2).rowStep, 0);
+      for (const points of drawing.openingPolygons) {
+        const ys = points.map(p => p[1]);
+        assert.ok(Math.max(...ys) <= drawing.combination.split - 1 + 1e-8
+          || Math.min(...ys) >= drawing.combination.split + 1 - 1e-8);
+      }
+      const assembly = context.assemblyDrawing();
+      assert.ok(Math.abs(assembly.model.panelHeight - drawing.height) < 1e-8);
+      assert.doesNotMatch(context.generateSvg(assembly), /NaN|Infinity/);
+    }
+  }
+});
+
+test('shared motifs retain the same snapped grid, independently of their infill', () => {
+  const { context, set } = generators('asanoha');
+  set('kumiko-combine', true);
+  set('kumiko-combination-layout', 'interlock');
+  set('kumiko-second-pattern', 'rindo');
+  context.syncPatternSizing();
+  const drawing = context.kumikoDrawing();
+  const plain = context.kumikoDrawing({ pattern: 'triangular', combine: false });
+  assert.deepEqual(drawing.grid, plain.grid);
+  set('kumiko-infill-strut', 1);
+  assert.deepEqual(context.kumikoDrawing().grid, plain.grid);
+  const assembly = context.assemblyDrawing();
+  assert.equal(assembly.model.panelHeight, drawing.height);
+});
+
+test('band positions visit every valid whole-repeat divider', () => {
+  for (const [first, second] of [['asanoha', 'goma'], ['masu', 'shokko'], ['kakuasa', 'sakura']]) {
+    const { context, set } = generators(first);
+    vm.runInContext('dimensionsLinked = false', context);
+    set('kumiko-combine', true);
+    set('kumiko-second-pattern', second);
+    set('kumiko-rows', 10);
+    const positions = context.bandPositions(first, 27.2, 10, second);
+    let previous = 0;
+    for (let position = 1; position <= positions.length; position++) {
+      set('kumiko-split', position);
+      context.syncPatternSizing();
+      const drawing = context.kumikoDrawing();
+      assert.equal(drawing.combination.position, position);
+      assert.ok(drawing.combination.split > previous);
+      previous = drawing.combination.split;
+      assert.equal(context.document.querySelector('#kumiko-split').max, String(positions.length));
+      assert.ok(positions[position - 1].topRows > 0 && positions[position - 1].bottomRows > 0);
+    }
+  }
+});
+
+test('band position clamps when rows shrink to one valid divider', () => {
+  const { context, set } = generators('asanoha');
+  vm.runInContext('dimensionsLinked = false', context);
+  set('kumiko-combine', true);
+  set('kumiko-second-pattern', 'goma');
+  set('kumiko-rows', 10);
+  set('kumiko-split', 4);
+  context.syncPatternSizing();
+  set('kumiko-rows', 4);
+  context.syncPatternSizing();
+  const input = context.document.querySelector('#kumiko-split');
+  assert.equal(input.value, '1');
+  assert.equal(input.max, '1');
+  assert.equal(input.disabled, true);
+  assert.equal(context.kumikoDrawing().combination.position, 1);
 });
 
 for (const [pattern, name, vertexCounts] of [
@@ -308,15 +468,15 @@ test('assembly shares the bottom frame with finger clearance when calculating to
     assert.equal(model.bodyHeight, model.panelHeight - model.frameWidth + over + model.thickness + under);
     assert.equal(model.totalHeight, model.bodyHeight + legs);
     const front = drawing.panels.find(panel => panel.name === 'Front');
-    assert.equal(front.windows[0].points[0][1], model.panelHeight - model.frameWidth + over);
-    assert.equal(front.windows[0].points[2][1], model.panelHeight - model.frameWidth + over + model.thickness);
+    assert.ok(Math.abs(front.windows[0].points[0][1] - (model.panelHeight - model.frameWidth + over)) < 1e-8);
+    assert.ok(Math.abs(front.windows[0].points[2][1] - (model.panelHeight - model.frameWidth + over + model.thickness)) < 1e-8);
     assert.equal(Math.max(...front.points.map(point => point[1])), model.totalHeight);
     assert.ok(front.openings.every(opening => opening.points.every(point => point[1] <= model.panelHeight - 8)));
     const paperMaterial = new THREE.MeshBasicMaterial();
     const box = buildBoxModel(drawing, [paperMaterial, paperMaterial], paperMaterial);
     box.children.find(panel => panel.name === 'Front').children[0].geometry.computeBoundingBox();
     const paperBounds = box.children.find(panel => panel.name === 'Front').children[0].geometry.boundingBox;
-    assert.equal(paperBounds.min.y, -(model.panelHeight - model.frameWidth + over));
+    assert.ok(Math.abs(paperBounds.min.y + model.panelHeight - model.frameWidth + over) < 1e-4);
     box.traverse(object => object.geometry?.dispose());
     paperMaterial.dispose();
   }
@@ -343,7 +503,7 @@ test('frame width does not add an extra gap above bottom fingers', () => {
     const wall = drawing.panels.find(panel => panel.name === 'Front');
     const patternBottom = Math.max(...wall.openings.flatMap(opening => opening.points.map(point => point[1])));
     assert.equal(wall.windows[0].points[0][1] - patternBottom, 10);
-    assert.equal(drawing.model.totalHeight, 243 - frame + 10 + 3 + 10 + 10);
+    assert.equal(drawing.model.totalHeight, drawing.model.panelHeight - frame + 10 + 3 + 10 + 10);
   }
 });
 
@@ -354,8 +514,8 @@ test('experimental combinations keep closed openings separated by a solid rail',
     const original = context.kumikoDrawing();
     set('kumiko-combine', true);
     set('kumiko-second-pattern', bottom);
-    for (const share of [20, 50, 80]) {
-      set('kumiko-split', share);
+    for (const position of [1, 2, 3]) {
+      set('kumiko-split', position);
       const drawing = context.kumikoDrawing();
       const { split, rail } = drawing.combination;
       let upper = 0, lower = 0;
@@ -374,7 +534,7 @@ test('experimental combinations keep closed openings separated by a solid rail',
       }
       assert.ok(upper > 0 && lower > 0);
       assert.doesNotMatch(context.generateSvg(drawing), /NaN|Infinity/);
-      assert.ok(drawing.filename.includes(`${bottom}-${share}pct`));
+      assert.ok(drawing.filename.includes(`${bottom}-position-${position}`));
     }
     const thumbnail = context.kumikoDrawing({ pattern: top });
     assert.equal(thumbnail.combination, undefined);
@@ -390,7 +550,7 @@ test('combined patterns export kerf-compensated assembly panels and build the 3D
   set('kumiko-second-pattern', 'asanoha');
   const drawing = context.assemblyDrawing();
   assert.equal(drawing.patternName, 'Hishi + Asanoha');
-  assert.ok(drawing.filename.includes('asanoha-50pct'));
+  assert.ok(drawing.filename.includes('asanoha-position-4'));
   for (const panel of drawing.panels.filter(panel => panel.name !== 'Bottom')) {
     assert.ok(panel.openings.length > 0);
     panel.openings.forEach(opening => assert.ok(context.polygonArea(opening.cutPoints) < context.polygonArea(opening.points)));
@@ -408,9 +568,9 @@ test('combined patterns export kerf-compensated assembly panels and build the 3D
 test('combination split rejects incomplete and out-of-range input', () => {
   const { context, set } = generators();
   set('kumiko-combine', true);
-  for (const share of ['', 0, 19, 81, 'NaN']) {
-    set('kumiko-split', share);
-    assert.throws(() => context.kumikoDrawing(), /top band share/);
+  for (const position of ['', 0, 1.5, 999, 'NaN']) {
+    set('kumiko-split', position);
+    assert.throws(() => context.kumikoDrawing(), /band position/);
   }
 });
 
@@ -475,8 +635,8 @@ test('Bands uses only the upper pattern on the top panel', () => {
   set('kumiko-combination-layout', 'bands');
   for (const accent of ['asanoha', 'sakura']) {
     set('kumiko-second-pattern', accent);
-    for (const share of [20, 50, 80]) {
-      set('kumiko-split', share);
+    for (const position of [1, 2, 3]) {
+      set('kumiko-split', position);
       assert.equal(JSON.stringify(topOpenings()), original, 'Lid must ignore lower pattern and band split');
     }
   }
