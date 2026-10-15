@@ -250,7 +250,11 @@ function clipPolygon(points, distance) {
   return result;
 }
 
-function kumikoDrawing({ panelWidth, panelHeight, pattern = kumikoPattern.value, cellCount, strut, frame } = {}) {
+function kumikoDrawing(options = {}) {
+  if (options.combine !== false && options.pattern === undefined && document.querySelector('#kumiko-combine').checked) {
+    return combinedPatternDrawing(options);
+  }
+  let { panelWidth, panelHeight, pattern = kumikoPattern.value, cellCount, strut, frame } = options;
   const [inputWidth, inputHeight, inputCellCount, inputStrut, inputFrame] = kumikoInputs.map(numericValue);
   cellCount ??= inputCellCount;
   strut ??= inputStrut;
@@ -288,7 +292,7 @@ function kumikoDrawing({ panelWidth, panelHeight, pattern = kumikoPattern.value,
   const fittedRows = latticeHeight / (pitch * (diamond || shokko ? 1 : Math.sqrt(3)));
   const rows = senbon ? 1 : squareGrid
     ? Math.max(1, Math.round(latticeHeight / pitch))
-    : Math.max(2, 2 * (rindo ? Math.floor(fittedRows) : Math.round(fittedRows)));
+    : Math.max(2, 2 * (rindo || options.trianglePatterns?.includes('rindo') ? Math.floor(fittedRows) : Math.round(fittedRows)));
   const rowHeight = latticeHeight / rows;
   const cellLimit = senbon ? cellCount : squareGrid
     ? rows * cellCount * (kakuasa ? 6 : masuTsunagi ? 9 : 1)
@@ -330,6 +334,7 @@ function kumikoDrawing({ panelWidth, panelHeight, pattern = kumikoPattern.value,
     }, 0)) / 2;
     // Omit collapsed edge slivers that cannot produce useful cutouts.
     if (polygon.length >= 3 && area > 0.01) {
+      if (openingPolygons.length >= 6000) throw new Error('Pattern is too dense. Reduce the pattern cell count.');
       openingPolygons.push(polygon);
       openings.push(outlinePath(polygon, 0, 0));
     }
@@ -343,6 +348,9 @@ function kumikoDrawing({ panelWidth, panelHeight, pattern = kumikoPattern.value,
       .filter(cell => cell.length >= 3 && polygonArea(cell) > 1e-6);
   }
   function addTriangle(triangle) {
+    const motif = options.trianglePattern?.(triangle, { pitch, rowHeight, latticeOrigin, rows, cellCount }) ?? pattern;
+    const rindo = motif === 'rindo', sakura = motif === 'sakura', goma = motif === 'goma';
+    const asanoha = motif === 'asanoha', tsumiishiKikko = motif === 'tsumiishi-kikko', kakuasa = motif === 'kakuasa';
     if (rindo) {
       // Two cevians from each tip form the angular gentian flower and its
       // central hexagon. Partition into convex cells before adding the webs.
@@ -501,6 +509,114 @@ function kumikoDrawing({ panelWidth, panelHeight, pattern = kumikoPattern.value,
     description: `${number(width)} × ${number(height)} mm`,
     label: `${name} Kumiko panel, ${number(width)} by ${number(height)} millimeters, with ${openings.length} cutouts`,
     hint: `${openings.length} closed cutouts + outer frame · millimeter units` };
+}
+
+// Clip two full-size lattices into disjoint bands. Their shared rail keeps
+// every opening closed and connected to the same outer frame for cutting.
+function combinedPatternDrawing(options) {
+  const layout = document.querySelector('#kumiko-combination-layout').value || 'bands';
+  if (layout !== 'bands') return sharedCellPatternDrawing(options, layout);
+  const first = kumikoDrawing({ ...options, combine: false });
+  const secondPattern = document.querySelector('#kumiko-second-pattern').value;
+  if (!patternDetails[secondPattern]) throw new Error('Choose a bottom pattern.');
+  const second = kumikoDrawing({ ...options, pattern: secondPattern, combine: false });
+  const share = numericValue(document.querySelector('#kumiko-split'));
+  if (!Number.isFinite(share) || share < 20 || share > 80) throw new Error('Enter a top band share from 20 to 80%.');
+  const frame = options.frame ?? numericValue(document.querySelector('#kumiko-frame'));
+  const rail = options.strut ?? numericValue(document.querySelector('#kumiko-strut'));
+  const split = frame + (first.height - 2 * frame) * share / 100;
+  const bands = [first, second].map((drawing, index) => drawing.openingPolygons.flatMap(points => {
+    const clipped = clipPolygon(points, point => index === 0 ? split - rail / 2 - point[1] : point[1] - split - rail / 2);
+    return clipped.length >= 3 && polygonArea(clipped) > 0.01 ? [clipped] : [];
+  }));
+  if (bands.some(band => !band.length)) throw new Error('Both pattern bands need openings. Adjust the split, frame, lattice width, or panel size.');
+  const openingPolygons = bands.flat();
+  const openings = openingPolygons.map(points => outlinePath(points, 0, 0));
+  const outer = outlinePath([[0, 0], [first.width, 0], [first.width, first.height], [0, first.height]], 0, 0);
+  const name = `${first.patternName} + ${second.patternName}`;
+  return { ...first, openingPolygons, patternName: name, combination: { layout: 'bands', split, rail, share },
+    cellDimensions: `Two bands · ${number(share)}% top · ${number(rail)} mm divider`,
+    content: `<g id="cut-outlines"><path id="outer-frame" d="${outer}" /><g id="pattern-openings">${openings.map(path => `<path d="${path}" />`).join('')}</g></g>`,
+    preview: `<path d="${outer} ${openings.join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`,
+    filename: `kumiko-${kumikoPattern.value}-${secondPattern}-${number(share)}pct-${number(first.width)}x${number(first.height)}mm.svg`,
+    label: `${name} combined panel, ${number(first.width)} by ${number(first.height)} millimeters. Top band ${number(share)} percent, with a ${number(rail)} millimeter solid divider. ${openings.length} cutouts.`,
+    hint: `${openings.length} closed cutouts + outer frame · two pattern bands · millimeter units` };
+}
+
+const sharedCellPatterns = ['triangular', 'asanoha', 'goma', 'sakura', 'tsumiishi-kikko', 'rindo'];
+
+// Evaluate one continuous composition around the perimeter. Periodicity
+// closes the last Left-to-Front seam as well as the three other corners.
+function interlockingAccentAt(x, y, width, height, rowHeight, wrap) {
+  const step = 0.13 * Math.sin(y / rowHeight * Math.PI / 2);
+  if (!wrap) return x / width + y / height > 1 + step;
+  const span = wrap.span ?? wrap.width;
+  const perimeter = span * wrap.count;
+  const globalX = wrap.index * span + x - (wrap.origin ?? 0);
+  const lowerBank = y / height > 0.5 + 0.23 * Math.sin(2 * Math.PI * globalX / perimeter) + step * 0.5;
+  // Continue the lid's dense edge cells down both adjoining walls. Sample
+  // farther into the lid as we descend, tapering the cap above the river.
+  const along = ((globalX / span - 1 + wrap.count / 2) % wrap.count + wrap.count) % wrap.count - wrap.count / 2;
+  const frame = wrap.frame ?? 0;
+  const depth = Math.max(0, y - frame) / (height - 2 * frame);
+  const inset = depth * wrap.width * 2.8;
+  const lidX = along <= 0 ? wrap.width * (1 + along) : wrap.width - inset;
+  const lidY = along <= 0 ? wrap.width - inset : wrap.width * (1 - along);
+  const cornerCap = Math.abs(along) < 1 && depth < 0.32
+    && interlockingAccentAt(lidX, lidY, wrap.width, wrap.width, wrap.lidRowHeight ?? rowHeight);
+  return lowerBank || cornerCap;
+}
+
+// Infill whole triangles on one shared lattice. Six triangles around a vertex
+// make a hexagonal island; no separate border or clipped motifs are needed.
+function sharedCellPatternDrawing(options, layout) {
+  if (!['islands', 'interlock'].includes(layout)) throw new Error('Choose a combination layout.');
+  const background = kumikoPattern.value;
+  const accent = document.querySelector('#kumiko-second-pattern').value;
+  if (![background, accent].every(pattern => sharedCellPatterns.includes(pattern))) {
+    throw new Error('Shared-lattice layouts need compatible triangular patterns.');
+  }
+  const width = options.panelWidth ?? numericValue(document.querySelector('#kumiko-width'));
+  const height = options.panelHeight ?? numericValue(document.querySelector('#kumiko-height'));
+  if (layout === 'interlock' && !options.wrap && options.surface !== 'top') {
+    options = { ...options, wrap: { width, index: 0, count: 4 } };
+  }
+  if (layout === 'interlock' && options.wrap) {
+    const frame = numericValue(document.querySelector('#kumiko-frame'));
+    const strut = numericValue(document.querySelector('#kumiko-strut'));
+    const span = options.wrap.width - 2 * frame + strut;
+    const count = (options.cellCount ?? numericValue(document.querySelector('#kumiko-cell-count'))) * span / (width - 2 * frame + strut);
+    const fittedRows = span / (span / count * Math.sqrt(3));
+    const rows = Math.max(2, 2 * ([background, accent].includes('rindo') ? Math.floor(fittedRows) : Math.round(fittedRows)));
+    options = { ...options, wrap: { ...options.wrap, span, origin: frame - strut / 2, frame, lidRowHeight: span / rows } };
+  }
+  let centers;
+  const counts = { background: 0, accent: 0 };
+  const drawing = kumikoDrawing({ ...options, pattern: 'triangular', combine: false, trianglePatterns: [background, accent],
+    trianglePattern(triangle, grid) {
+      centers ??= [[0.34, 0.24], [0.66, 0.5], [0.34, 0.76]].map(([u, v]) => {
+        const row = Math.max(1, Math.min(grid.rows - 1, Math.round((height * v - grid.latticeOrigin) / grid.rowHeight)));
+        const shift = (row % 2) * grid.pitch / 2;
+        const column = Math.max(0, Math.min(grid.cellCount, Math.round((width * u - grid.latticeOrigin - shift) / grid.pitch)));
+        return [grid.latticeOrigin + column * grid.pitch + shift, grid.latticeOrigin + row * grid.rowHeight];
+      });
+      const center = [0, 1].map(axis => triangle.reduce((sum, point) => sum + point[axis], 0) / 3);
+      const useAccent = layout === 'islands'
+        ? centers.some(point => triangle.some(vertex => Math.hypot(vertex[0] - point[0], vertex[1] - point[1]) < 1e-6))
+        : interlockingAccentAt(center[0], center[1], width, height, grid.rowHeight, options.wrap);
+      // Count only triangles that intersect the panel, not the generated margin.
+      if (center[0] > 0 && center[0] < width && center[1] > 0 && center[1] < height) counts[useAccent ? 'accent' : 'background']++;
+      return useAccent ? accent : background;
+    }
+  });
+  if (!options.wrap && (!counts.background || !counts.accent)) throw new Error('Use more cells across the width to fit both shared-lattice patterns.');
+  const name = `${patternDetails[background].name} + ${patternDetails[accent].name}`;
+  const layoutName = layout === 'islands' ? 'Hexagonal islands' : 'River';
+  return { ...drawing, patternName: name, combination: { layout, counts, ...(options.wrap ? { wrap: options.wrap } : {}) },
+    cellDimensions: `${layoutName} · shared triangular lattice`,
+    filename: `kumiko-${background}-${accent}-${layout}-${number(width)}x${number(height)}mm.svg`,
+    label: `${name}, ${layoutName.toLowerCase()} on a shared lattice, ${number(width)} by ${number(height)} millimeters.`,
+    hint: `${drawing.openingPolygons.length} closed cutouts + outer frame · ${layoutName.toLowerCase()} · millimeter units` };
 }
 
 // Pattern cells are convex. Inset their cut paths by half the kerf so the
@@ -668,15 +784,22 @@ function assemblyDrawing() {
   if (!Number.isFinite(cordDiameter) || cordDiameter < 1 || cordDiameter > 100) throw new Error('Enter a cord diameter from 1 to 100 mm.');
   if (cordDiameter <= kerf + 0.5) throw new Error('Cord diameter must exceed kerf + 0.5 mm.');
   if (cordDiameter + kerf + 0.5 >= bottomPitch) throw new Error('Reduce cord diameter or use fewer bottom fingers to leave material beside the cord notch.');
-  const pattern = kumikoDrawing();
+  const wrapInterlocking = document.querySelector('#kumiko-combine').checked && document.querySelector('#kumiko-combination-layout').value === 'interlock';
+  const wrappedPattern = index => kumikoDrawing({ panelWidth, panelHeight, wrap: { width: panelWidth, index, count: 4 } });
+  const pattern = wrapInterlocking ? wrappedPattern(0) : kumikoDrawing();
   const latticeWidth = numericValue(document.querySelector('#kumiko-strut'));
   const web = Math.max(0.5, latticeWidth);
   const patternEdge = Math.max(frameWidth, thickness + web);
   const patternBottom = Math.min(panelHeight - frameWidth, slotTop - web);
-  const patternOpenings = fittedPatternOpenings(pattern, patternEdge, panelWidth, patternBottom, kerf);
-  if (!patternOpenings.length) throw new Error('No pattern openings fit above the bottom slots. Reduce the frame, lattice width, or bottom clearance, or increase the panel dimensions.');
-  // The top uses the same pattern settings, fitted to the square box footprint.
-  const topPattern = kumikoDrawing({ panelWidth, panelHeight: panelWidth });
+  // The drawing sheet order differs from the assembled perimeter order:
+  // Front -> Right -> Back -> Left, all following each panel's local +X.
+  const wallPatterns = wrapInterlocking ? [pattern, wrappedPattern(3), wrappedPattern(2), wrappedPattern(1)] : Array(4).fill(pattern);
+  const wallOpenings = wallPatterns.map(wall => fittedPatternOpenings(wall, patternEdge, panelWidth, patternBottom, kerf));
+  const wallOpeningCount = wallOpenings.reduce((sum, openings) => sum + openings.length, 0);
+  if (wallOpenings.some(openings => !openings.length)) throw new Error('No pattern openings fit above the bottom slots. Reduce the frame, lattice width, or bottom clearance, or increase the panel dimensions.');
+  // Bands continue around the walls; the lid uses their upper pattern alone.
+  const topPattern = kumikoDrawing({ panelWidth, panelHeight: panelWidth, surface: 'top',
+    ...(pattern.combination?.layout === 'bands' ? { combine: false } : {}) });
   const topOpenings = fittedPatternOpenings(topPattern, patternEdge, panelWidth, panelWidth - patternEdge, kerf);
   if (!topOpenings.length) throw new Error('No pattern openings fit inside the top joints. Reduce the frame or lattice width, or increase the panel width.');
   const margin = 2 + kerf / 2, gap = 8 + kerf;
@@ -720,22 +843,22 @@ function assemblyDrawing() {
         windows.push({ points, cutPoints, path: outlinePath(cutPoints, x, y) });
       }
     }
-    const panelOpenings = index < 4 ? patternOpenings : name === 'Top' ? topOpenings : [];
+    const panelOpenings = index < 4 ? wallOpenings[index] : name === 'Top' ? topOpenings : [];
     const openings = panelOpenings.map(opening => ({ ...opening, path: outlinePath(opening.cutPoints, x, y) }));
     return { name, points, cutPoints, windows, openings, x, y, path: outlinePath(cutPoints, x, y), previewPath: outlinePath(previewPoints, x, y) };
   });
   const content = `<g id="cut-outlines">${panels.map(panel => `<g id="panel-${panel.name.toLowerCase()}"><title>${panel.name}</title><path d="${panel.path}" />${panel.openings.length ? `<g id="${panel.name.toLowerCase()}-pattern-openings">${panel.openings.map(opening => `<path d="${opening.path}" />`).join('')}</g>` : ''}${panel.windows.length ? `<g id="${panel.name.toLowerCase()}-bottom-windows">${panel.windows.map(window => `<path d="${window.path}" />`).join('')}</g>` : ''}</g>`).join('')}</g>`;
-  return { width, height, panels, content,
+  return { width, height, panels, content, patternName: pattern.patternName,
     model: { panelWidth, panelHeight, frameWidth, bodyHeight, thickness, legHeight, bottomOffset, bottomOver, cordDiameter, totalHeight },
     previewNote: previewScale > 1
       ? `Joint depth exaggerated ×${number(Number(previewScale.toFixed(2)))} for visibility. SVG uses exact dimensions.`
       : 'Joint depth shown at actual size. SVG uses exact dimensions.',
     preview: panels.map(panel => `<text x="${number(panel.x)}" y="${number(panel.y - labelSpace / 4)}" fill="#202f61" stroke="none" font-family="monospace" font-size="${number(labelSpace * 0.65)}">${panel.name.toUpperCase()}</text><path d="${panel.previewPath} ${panel.openings.map(opening => opening.path).join(' ')} ${panel.windows.map(window => window.path).join(' ')}" fill="#c9a775" fill-rule="evenodd" stroke="#202f61" />`).join(''),
     joints: `${fingers} front/back fingers · ${fingers - 1} left/right and top fingers per edge · ${number(Number(pitch.toFixed(3)))} mm vertical segments · ${number(Number(topPitch.toFixed(3)))} mm top segments · ${number(thickness)} mm joint depth · Bottom: ${bottomFingers} fingers per edge, ${number(Number(bottomPitch.toFixed(3)))} mm wide, ${number(bottomOffset)} mm under / ${number(bottomOver)} mm over · ${number(cordDiameter)} mm cord notch`,
-    filename: `assembly-${kumikoPattern.value}-${number(panelWidth)}x${number(totalHeight)}mm-total-${number(legHeight)}mm-legs-${number(thickness)}mm-material.svg`,
+    filename: `assembly-${kumikoPattern.value}${pattern.combination ? `-${document.querySelector('#kumiko-second-pattern').value}-${pattern.combination.layout === 'bands' ? `${number(pattern.combination.share)}pct` : pattern.combination.layout}` : ''}-${number(panelWidth)}x${number(totalHeight)}mm-total-${number(legHeight)}mm-legs-${number(thickness)}mm-material.svg`,
     description: `Box: ${number(panelWidth)} × ${number(panelWidth)} × ${number(totalHeight)} mm (including legs)`,
-    label: `${panels.length} box panels: ${panelNames.join(', ')}. ${pattern.patternName} pattern with ${patternOpenings.length} cutouts per side wall and ${topOpenings.length} in the top. Bottom fingers fit ${4 * bottomFingers} closed wall windows. A ${number(cordDiameter)} millimeter cord notch opens from the center of one bottom edge. Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall. Outside size ${panelWidth} by ${panelWidth} by ${totalHeight} millimeters including legs. Pattern panel height ${panelHeight} millimeters. Wall body height ${bodyHeight} millimeters.`,
-    hint: `${panels.length} panel outlines + ${4 * patternOpenings.length + topOpenings.length} pattern cutouts + ${4 * bottomFingers} windows · kerf compensated · millimeter units` };
+    label: `${panels.length} box panels: ${panelNames.join(', ')}. ${pattern.patternName} pattern with ${wallOpeningCount} cutouts across the side walls and ${topOpenings.length} in the top.${wrapInterlocking ? ' The river continues around Front, Right, Back, Left and closes at the front seam.' : ''} Bottom fingers fit ${4 * bottomFingers} closed wall windows. A ${number(cordDiameter)} millimeter cord notch opens from the center of one bottom edge. Two ${legWidth} millimeter wide, ${legHeight} millimeter high legs per wall. Outside size ${panelWidth} by ${panelWidth} by ${totalHeight} millimeters including legs. Pattern panel height ${panelHeight} millimeters. Wall body height ${bodyHeight} millimeters.`,
+    hint: `${panels.length} panel outlines + ${wallOpeningCount + topOpenings.length} pattern cutouts + ${4 * bottomFingers} windows · kerf compensated · millimeter units` };
 }
 
 function matingPath(points, matingEdges, x, y) {
@@ -778,8 +901,12 @@ function updateBoxPreview(drawing) {
   document.querySelector('#box-dimensions').textContent = drawing.description;
   document.querySelector('#box-material').textContent = `${savedMaterials.find(material => material.id === selectedMaterialId).name} · ${number(drawing.model.thickness)} mm`;
   const details = patternDetails[kumikoPattern.value];
-  document.querySelector('#box-pattern-name').textContent = details.name;
-  document.querySelector('#box-pattern-description').textContent = details.description;
+  document.querySelector('#box-pattern-name').textContent = drawing.patternName || details.name;
+  document.querySelector('#box-pattern-description').textContent = document.querySelector('#kumiko-combine').checked
+    ? document.querySelector('#kumiko-combination-layout').value === 'bands'
+      ? `Two pattern bands joined by a solid divider. ${details.name} above; ${patternDetails[document.querySelector('#kumiko-second-pattern').value].name} below.`
+      : `${details.name} and ${patternDetails[document.querySelector('#kumiko-second-pattern').value].name} share one triangular lattice, with ${document.querySelector('#kumiko-combination-layout').value === 'islands' ? 'hexagonal motif islands' : 'a river of simpler cells flowing around all four walls'}.`
+    : details.description;
   stage.setAttribute('aria-label', `Assembled 3D box. ${drawing.label}`);
   loading.hidden = false;
   stage.hidden = true;
@@ -1227,6 +1354,45 @@ const patternPicker = new PatternPicker(kumikoPattern, value => {
   const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, frame: 2 });
   return `<svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">${drawing.preview}</svg>`;
 });
+const secondPatternSelect = document.querySelector('#kumiko-second-pattern');
+secondPatternSelect.replaceChildren(...Array.from(kumikoPattern.options, option => option.cloneNode(true)));
+secondPatternSelect.value = 'asanoha';
+const secondPatternPicker = new PatternPicker(secondPatternSelect, value => {
+  const drawing = kumikoDrawing({ panelWidth: 100, panelHeight: 72, pattern: value, cellCount: 3, strut: 1, frame: 2 });
+  return `<svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">${drawing.preview}</svg>`;
+});
+secondPatternSelect.addEventListener('change', () => { secondPatternPicker.sync(); updatePreview(); });
+let bandPatternPair = null;
+let previousCombinationLayout = 'bands';
+function syncCombinationControls() {
+  const enabled = document.querySelector('#kumiko-combine').checked;
+  const layout = document.querySelector('#kumiko-combination-layout').value;
+  if (previousCombinationLayout === 'bands' && layout !== 'bands') bandPatternPair = [kumikoPattern.value, secondPatternSelect.value];
+  if (previousCombinationLayout !== 'bands' && layout === 'bands' && bandPatternPair) {
+    [kumikoPattern.value, secondPatternSelect.value] = bandPatternPair;
+    adjustPatternCellCount();
+  }
+  previousCombinationLayout = layout;
+  const shared = enabled && layout !== 'bands';
+  document.querySelector('#kumiko-combine-controls').hidden = !enabled;
+  document.querySelector('#kumiko-band-share').hidden = layout !== 'bands';
+  document.querySelector('label[for="kumiko-second-pattern-trigger"]').textContent = layout === 'bands' ? 'Bottom pattern' : 'Accent pattern';
+  document.querySelector('label[for="kumiko-pattern-trigger"]').textContent = shared ? 'Background pattern' : 'Pattern';
+  if (shared && !sharedCellPatterns.includes(kumikoPattern.value)) { kumikoPattern.value = 'triangular'; adjustPatternCellCount(); }
+  if (shared && !sharedCellPatterns.includes(secondPatternSelect.value)) secondPatternSelect.value = 'asanoha';
+  patternPicker.setAllowedValues(shared ? sharedCellPatterns : null);
+  secondPatternPicker.setAllowedValues(shared ? sharedCellPatterns : null);
+  patternPicker.sync();
+  secondPatternPicker.sync();
+  document.querySelector('#kumiko-combine-help').textContent = layout === 'bands'
+    ? 'Two bands share a frame and a solid divider matching the lattice width. Walls use both patterns; the top panel uses only the top pattern.'
+    : layout === 'interlock'
+    ? 'Compatible motifs share one triangular lattice. In Assembly and Preview, the design continues around all four walls and closes at the final corner.'
+    : 'Compatible motifs fill whole cells on one triangular lattice, with no extra divider. Applies to walls and top. Inspired by kumiko infill compositions.';
+}
+document.querySelector('#kumiko-combine').addEventListener('change', () => { syncCombinationControls(); updatePreview(); });
+document.querySelector('#kumiko-combination-layout').addEventListener('change', () => { syncCombinationControls(); updatePreview(); });
+document.querySelector('#kumiko-split').addEventListener('input', updatePreview);
 kumikoPattern.addEventListener('change', () => {
   patternPicker.sync();
   adjustPatternCellCount();

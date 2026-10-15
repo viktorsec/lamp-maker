@@ -70,6 +70,13 @@ class PatternPicker {
     }, true);
   }
 
+  setAllowedValues(values) {
+    this.options.forEach((item, index) => {
+      item.hidden = values !== null && !values.includes(item.dataset.value);
+      this.select.options[index].disabled = item.hidden;
+    });
+  }
+
   sync() {
     const selected = this.options.find(item => item.dataset.value === this.select.value);
     this.options.forEach(item => item.setAttribute('aria-selected', String(item === selected)));
@@ -98,6 +105,7 @@ class PatternPicker {
   }
 
   focusOption(index) {
+    if (this.options[index]?.hidden) index = this.options.findIndex(item => !item.hidden);
     this.options[index].focus({ preventScroll: true });
     this.options[index].scrollIntoView({ block: 'nearest' });
   }
@@ -110,31 +118,33 @@ class PatternPicker {
   }
 
   choose(item) {
+    if (!item || item.hidden) return;
     this.select.value = item.dataset.value;
     this.select.dispatchEvent(new Event('change', { bubbles: true }));
     this.close();
   }
 
   onKey(event) {
-    const index = this.options.indexOf(document.activeElement);
+    const options = this.options.filter(item => !item.hidden);
+    const index = options.indexOf(document.activeElement);
     let next;
-    if (event.key === 'ArrowDown') next = (index + 1) % this.options.length;
-    if (event.key === 'ArrowUp') next = (index - 1 + this.options.length) % this.options.length;
+    if (event.key === 'ArrowDown') next = (index + 1) % options.length;
+    if (event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
     if (event.key === 'Home') next = 0;
-    if (event.key === 'End') next = this.options.length - 1;
+    if (event.key === 'End') next = options.length - 1;
     if (event.key === 'Escape') { event.preventDefault(); this.close(); return; }
     if (event.key === 'Tab') { this.close(); return; }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      this.choose(this.options[index]);
+      this.choose(options[index]);
       return;
     }
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
       this.search = (Date.now() - (this.searchTime || 0) < 700 ? this.search || '' : '') + event.key.toLowerCase();
       this.searchTime = Date.now();
-      next = this.options.findIndex(item => item.querySelector('strong').textContent.toLowerCase().startsWith(this.search));
+      next = options.findIndex(item => item.querySelector('strong').textContent.toLowerCase().startsWith(this.search));
       if (next < 0) next = undefined;
     }
-    if (next !== undefined) { event.preventDefault(); this.focusOption(next); }
+    if (next !== undefined) { event.preventDefault(); this.focusOption(this.options.indexOf(options[next])); }
   }
 }

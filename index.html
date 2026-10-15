@@ -7,8 +7,8 @@
     <title>Lamp Maker — Cut files</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="styles.css?v=12" />
-    <script src="pattern-picker.js?v=1" defer></script>
-    <script src="app.js?v=57" defer></script>
+    <script src="pattern-picker.js?v=2" defer></script>
+    <script src="app.js?v=70" defer></script>
   </head>
   <body>
     <main>
@@ -130,6 +130,25 @@
               <option value="rindo">Rindō / Gentian</option>
             </select>
             <p id="kumiko-pattern-description" class="hint" aria-live="polite"></p>
+            <fieldset class="bottom-controls">
+              <legend>Experimental</legend>
+              <label class="offset-toggle"><input id="kumiko-combine" type="checkbox" />Combine patterns</label>
+              <div id="kumiko-combine-controls" hidden>
+                <label for="kumiko-combination-layout">Composition</label>
+                <select id="kumiko-combination-layout" class="material-select">
+                  <option value="bands">Bands</option>
+                  <option value="islands">Hexagonal islands</option>
+                  <option value="interlock">River</option>
+                </select>
+                <label for="kumiko-second-pattern">Bottom pattern</label>
+                <select id="kumiko-second-pattern" class="material-select" aria-describedby="kumiko-combine-help"></select>
+                <div id="kumiko-band-share">
+                <label for="kumiko-split">Top band share</label>
+                <div class="input-wrap"><input id="kumiko-split" type="number" min="20" max="80" step="1" value="50" aria-describedby="kumiko-combine-help size-error" /><span>%</span></div>
+                </div>
+                <p id="kumiko-combine-help" class="hint">The main pattern fills the top band. Both bands share cell count, lattice width, and frame. A solid divider matching the lattice width joins them. Walls use both patterns; the top panel uses only the top pattern.</p>
+              </div>
+            </fieldset>
             <div id="kumiko-dimensions" class="dimension-pair" data-linked="true">
               <div class="dimension-fields">
                 <label for="kumiko-width">Panel width</label>
